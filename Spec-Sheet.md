@@ -103,6 +103,11 @@
    - 緊急修正を除き、Bizの更新予定は少なくとも1か月前までに対象利用者へ連絡する。変更内容、確認対象、予定日および影響範囲を案内に含める。
    - 標準の昇格順序は **Dev → Stable → Biz** とし、Bizへの直接配備は行わない。緊急時に例外対応する場合は、理由、影響範囲、検証結果、ロールバック方法を `Spec-History.md` に記録する。
    - StableおよびBizの本番配備は自動昇格させず、品質ゲート成功後の明示的な手動承認を必須とする。
+4. **GitHub Actions Dev配備 (`.github/workflows/deploy-dev.yml`)**:
+   - `main`へのPushまたはActionsの手動実行で、`npm run verify`、`npm run build:development`、Firebase Hosting (`cuebook-dev`) 配備を順番に実行する。
+   - GitHub Environment `development` のVariablesにFirebase Web設定、Secretsに`GCP_WIF_PROVIDER`と`FIREBASE_DEPLOYER_SERVICE_ACCOUNT`を登録する。
+   - Google Cloud認証はGitHub OIDC／Workload Identity Federationを使用し、長期Firebaseトークンをリポジトリへ保存しない。
+   - Stable／Bizの配備Workflowは別途作成し、Dev Workflowから自動昇格させない。
 
 ### F. データ整合性・設計原則 (v1.10)
 1. **ACID 境界**:

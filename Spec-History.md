@@ -8,6 +8,13 @@
 
 ## 変更履歴一覧 (Change History)
 
+### [2026-08-03] Dev用GitHub Actions配備Workflow
+- **自動検証・配備 (`.github/workflows/deploy-dev.yml`)**:
+  - `main`へのPushまたは手動実行をトリガーに、依存関係インストール、`npm run verify`、開発モードBuild、`cuebook-dev` Hosting配備を実行。
+  - GitHub Environment `development` のVariables／SecretsからFirebase設定とGoogle Cloud認証情報を注入する。
+  - GitHub OIDC／Workload Identity Federationを使用し、長期Firebaseトークンを保管しない。
+  - Stable／Bizへは自動配備せず、既定の昇格順序と手動承認ルールを維持。
+
 ### [2026-08-03] Dev／Stable／Biz リリース運用規定
 - **環境の役割**:
   - Dev (`cuebook-dev`) は新機能を頻繁に投入するテスト環境、Stable (`cuebook-stable`) は安定版のみを提供する一般公開環境、Biz (`cuebook-biz`) は特定利用者・店舗向け商用環境と定義。
