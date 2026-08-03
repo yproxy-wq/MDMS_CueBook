@@ -1,0 +1,1560 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CueBook 総合利用マニュアル</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./tokens.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html {
+      scroll-behavior: smooth;
+      background-color: var(--color-paper-deep);
+      color: var(--color-ink);
+      font-family: var(--font-body);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      min-height: 100vh;
+      background-color: var(--color-paper-deep);
+      color: var(--color-ink);
+    }
+
+    .shell {
+      display: flex;
+      min-height: 100vh;
+      background-color: var(--color-paper-deep);
+    }
+
+    /* Left Sidebar / Rail */
+    .rail {
+      width: 300px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      background-color: var(--color-paper-deep);
+      border-right: 1px solid var(--color-line);
+      padding: 2.25rem 1.5rem 1.75rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow-y: auto;
+      z-index: 10;
+    }
+
+    .rail::before {
+      content: '';
+      position: absolute;
+      top: 100px;
+      right: -220px;
+      width: 684px;
+      height: 1404px;
+      background-image: url('https://github.com/yproxy-wq/MDMS_CueBook/blob/main/nib.png?raw=true');
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: top center;
+      opacity: 0.12;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    [data-theme="dark"] .rail::before {
+      opacity: 0.15;
+      filter: invert(1);
+    }
+
+    .rail-top, .rail-bottom {
+      position: relative;
+      z-index: 2;
+    }
+
+    .rail-top {
+      display: flex;
+      flex-direction: column;
+      gap: 1.125rem;
+    }
+
+    .brand-logo {
+      font-family: var(--font-display);
+      font-size: 1.625rem;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      color: var(--color-ink);
+      text-decoration: none;
+      line-height: 1;
+      display: block;
+      margin: 0;
+    }
+
+    .brand-sub {
+      font-size: 0.9375rem;
+      font-weight: 700;
+      color: var(--color-ink);
+      letter-spacing: 0.04em;
+      margin-top: -0.25rem;
+      line-height: 1.3;
+    }
+
+    .brand-desc {
+      font-size: 0.75rem;
+      line-height: 1.6;
+      color: var(--color-ink-soft);
+      margin-top: -0.25rem;
+    }
+
+    .theme-toggle {
+      display: inline-block;
+      width: 100%;
+      padding: 0.5rem;
+      background-color: var(--color-card-bg);
+      border: 1px solid var(--color-line);
+      color: var(--color-ink);
+      font-size: 0.75rem;
+      font-family: var(--font-body);
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+      text-align: center;
+    }
+
+    .theme-toggle:hover {
+      background-color: var(--color-accent-bg);
+    }
+
+    /* Manual Mode Switcher (Horizontal Toggle) */
+    .mode-switch-container {
+      margin-top: 0.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+    }
+
+    .mode-switch-label {
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      color: var(--color-muted);
+      letter-spacing: 0.1em;
+    }
+
+    .mode-switch-group {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.2rem;
+      background-color: var(--color-card-bg);
+      padding: 0.25rem;
+      border: 1px solid var(--color-line);
+      border-radius: 6px;
+    }
+
+    .mode-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.125rem;
+      padding: 0.4rem 0.15rem;
+      font-size: 0.7rem;
+      font-family: var(--font-body);
+      font-weight: 600;
+      color: var(--color-ink-soft);
+      text-decoration: none;
+      border-radius: 4px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .mode-btn:hover {
+      background-color: var(--color-accent-bg);
+      color: var(--color-ink);
+    }
+
+    .mode-btn.active {
+      background-color: var(--color-accent);
+      color: #090e17;
+      font-weight: 700;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+    }
+
+    [data-theme="light"] .mode-btn.active {
+      background-color: #0f172a;
+      color: #ffffff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    }
+
+    .mode-btn .mode-name {
+      font-size: 0.725rem;
+      line-height: 1.1;
+    }
+
+    .mode-btn .mode-badge {
+      font-family: var(--font-mono);
+      font-size: 0.575rem;
+      opacity: 0.9;
+      padding: 0.05rem 0.2rem;
+      border-radius: 2px;
+      background-color: rgba(0, 0, 0, 0.15);
+      line-height: 1;
+    }
+
+    [data-theme="light"] .mode-btn.active .mode-badge {
+      background-color: rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+    }
+
+    /* Table of Contents */
+    .toc-label {
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      color: var(--color-muted);
+      letter-spacing: 0.1em;
+      margin-top: 0.5rem;
+    }
+
+    .toc-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .toc-link {
+      display: block;
+      padding: 0.375rem 0.5rem;
+      font-size: 0.75rem;
+      color: var(--color-ink-soft);
+      text-decoration: none;
+      border-radius: 4px;
+      transition: all 0.15s ease;
+    }
+
+    .toc-link:hover {
+      color: var(--color-ink);
+      background-color: var(--color-accent-bg);
+    }
+
+    .toc-link.active {
+      color: var(--color-ink);
+      font-weight: 700;
+      background-color: var(--color-accent-bg);
+      border-left: 2px solid var(--color-accent);
+      padding-left: 0.625rem;
+    }
+
+    .rail-note {
+      font-size: 0.6875rem;
+      line-height: 1.5;
+      color: var(--color-muted);
+      padding-top: 1rem;
+      border-top: 1px dashed var(--color-line);
+      margin-top: 1rem;
+    }
+
+    /* Main Content */
+    main {
+      flex: 1;
+      padding: 2.25rem 4rem 3rem 4rem;
+      max-width: 960px;
+      background-color: var(--color-paper-deep);
+    }
+
+    .main-title {
+      margin-bottom: 1.5rem;
+    }
+
+    .main-title .en {
+      font-family: var(--font-display);
+      font-size: 2.25rem;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      color: var(--color-ink);
+      line-height: 1;
+      margin: 0 0 0.375rem 0;
+    }
+
+    .main-title .jp {
+      font-size: 1.125rem;
+      font-weight: 700;
+      color: var(--color-ink-soft);
+      line-height: 1.4;
+    }
+
+    .divider {
+      height: 1px;
+      background-color: var(--color-line);
+      margin: 1.5rem 0 2rem 0;
+    }
+
+    /* Section Styles */
+    .section {
+      margin-bottom: 3.5rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .section-num {
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      color: var(--color-muted);
+      letter-spacing: 0.12em;
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+
+    .section-title {
+      font-size: 1.375rem;
+      font-weight: 700;
+      color: var(--color-ink);
+      margin-bottom: 0.75rem;
+      letter-spacing: -0.01em;
+    }
+
+    .section-desc {
+      font-size: 0.875rem;
+      line-height: 1.7;
+      color: var(--color-ink-soft);
+      margin-bottom: 1.25rem;
+    }
+
+    /* Grid Layouts */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+      margin-top: 1.25rem;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1rem;
+      margin-top: 1.25rem;
+    }
+
+    .card {
+      background-color: var(--color-card-bg);
+      border: 1px solid var(--color-card-border);
+      border-radius: 6px;
+      padding: 1.25rem;
+    }
+
+    .card .tag {
+      font-family: var(--font-mono);
+      font-size: 0.625rem;
+      color: var(--color-accent);
+      letter-spacing: 0.08em;
+      display: inline-block;
+      margin-bottom: 0.375rem;
+    }
+
+    .card h3 {
+      font-size: 0.9375rem;
+      font-weight: 700;
+      color: var(--color-ink);
+      margin-bottom: 0.375rem;
+    }
+
+    .card p {
+      font-size: 0.8125rem;
+      line-height: 1.6;
+      color: var(--color-ink-soft);
+    }
+
+    /* Figures & Images */
+    figure {
+      margin: 1.25rem 0;
+      border: 1px solid var(--color-line);
+      border-radius: 6px;
+      overflow: hidden;
+      background-color: #000000;
+    }
+
+    figure img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    figcaption {
+      padding: 0.5rem 0.875rem;
+      font-size: 0.75rem;
+      color: var(--color-muted);
+      background-color: var(--color-card-bg);
+      border-top: 1px solid var(--color-line);
+    }
+
+    /* Image Placeholder */
+    .image-placeholder {
+      margin: 1.25rem 0;
+      border: 2px dashed var(--color-line);
+      border-radius: 6px;
+      padding: 1.25rem;
+      background-color: var(--color-card-bg);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .image-placeholder-tag {
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      font-weight: 700;
+      color: var(--color-accent);
+      letter-spacing: 0.08em;
+    }
+
+    .image-placeholder-desc {
+      font-size: 0.8125rem;
+      line-height: 1.6;
+      color: var(--color-ink-soft);
+    }
+
+    /* Step List */
+    .step-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.875rem;
+      margin-top: 1.25rem;
+    }
+
+    .step-item {
+      display: flex;
+      gap: 0.875rem;
+      align-items: flex-start;
+      background-color: var(--color-card-bg);
+      border: 1px solid var(--color-card-border);
+      border-radius: 6px;
+      padding: 1rem;
+    }
+
+    .step-badge {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background-color: var(--color-accent);
+      color: #ffffff;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 0.125rem;
+    }
+
+    [data-theme="dark"] .step-badge {
+      color: #000000;
+    }
+
+    .step-content h4 {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: var(--color-ink);
+      margin-bottom: 0.25rem;
+    }
+
+    .step-content p {
+      font-size: 0.8125rem;
+      line-height: 1.6;
+      color: var(--color-ink-soft);
+    }
+
+    /* Feature Table */
+    .feature-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1.25rem;
+      font-size: 0.8125rem;
+    }
+
+    .feature-table th,
+    .feature-table td {
+      padding: 0.75rem 0.875rem;
+      text-align: left;
+      border: 1px solid var(--color-line);
+    }
+
+    .feature-table th {
+      background-color: var(--color-card-bg);
+      color: var(--color-ink);
+      font-weight: 700;
+    }
+
+    .feature-table td {
+      color: var(--color-ink-soft);
+      background-color: var(--color-paper-deep);
+    }
+
+    .feature-table code {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      background-color: var(--color-code-bg);
+      color: var(--color-ink);
+      padding: 0.125rem 0.375rem;
+      border-radius: 3px;
+    }
+
+    /* Callout & Details */
+    .callout {
+      background-color: var(--color-accent-bg);
+      border-left: 3px solid var(--color-accent);
+      padding: 1rem 1.25rem;
+      margin: 1.25rem 0;
+      border-radius: 0 6px 6px 0;
+      font-size: 0.8125rem;
+      line-height: 1.6;
+      color: var(--color-ink);
+    }
+
+    .callout strong {
+      display: block;
+      margin-bottom: 0.25rem;
+      color: var(--color-accent);
+    }
+
+    details {
+      background-color: var(--color-card-bg);
+      border: 1px solid var(--color-card-border);
+      border-radius: 6px;
+      padding: 0.875rem 1.25rem;
+      margin: 1.25rem 0;
+    }
+
+    summary {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: var(--color-ink);
+      cursor: pointer;
+    }
+
+    details p {
+      margin-top: 0.625rem;
+      font-size: 0.8125rem;
+      line-height: 1.6;
+      color: var(--color-ink-soft);
+    }
+
+    /* Footer */
+    footer {
+      margin-top: 4rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--color-line);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--color-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Mobile & Tablet Responsiveness */
+    @media (max-width: 900px) {
+      .shell { flex-direction: column; }
+      .rail {
+        width: 100%;
+        height: auto;
+        position: relative;
+        border-right: none;
+        border-bottom: 1px solid var(--color-line);
+        padding: 1.5rem;
+      }
+      .toc-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.5rem;
+      }
+      main {
+        padding: 1.75rem 1.25rem 2.5rem 1.25rem;
+      }
+      .grid-3, .grid-2 {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .rail-bottom { display: none; }
+    }
+
+    @media (max-width: 480px) {
+      .toc-list { grid-template-columns: minmax(0, 1fr); }
+      .main-title .en { font-size: 1.875rem; }
+      .main-title .jp { font-size: 1rem; }
+      main { padding: 1.5rem 1rem 2rem 1rem; }
+      .card { padding: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <!-- Left Navigation Rail -->
+    <aside class="rail">
+      <div class="rail-top">
+        <a href="#" class="brand-logo">CUEBOOK</a>
+        <div class="brand-sub">総合利用マニュアル</div>
+        <p class="brand-desc">
+          CueBookは、TRPGやマーダーミステリーの進行役であるGMのために、台本、音響、タイマー、進行予実、配布資料、同期画面をひとつの流れに統合した進行支援コンソールです。
+        </p>
+        
+        <button id="themeToggle" class="theme-toggle">ライトモードに変更</button>
+
+        <div class="mode-switch-container">
+          <div class="mode-switch-label">MANUAL SWITCH</div>
+          <div class="mode-switch-group">
+            <button type="button" class="mode-btn active" id="btnRun">
+              <span class="mode-name">進行</span>
+              <span class="mode-badge">RUN</span>
+            </button>
+            <button type="button" class="mode-btn" id="btnEdit">
+              <span class="mode-name">編集</span>
+              <span class="mode-badge">EDIT</span>
+            </button>
+            <button type="button" class="mode-btn" id="btnSync">
+              <span class="mode-name">子画面</span>
+              <span class="mode-badge">SYNC</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="toc-label">CONTENTS</div>
+
+        <!-- TOC 進行マニュアル用 -->
+        <ul class="toc-list" id="tocRun">
+          <li><a href="#win3" class="toc-link active"><span>01. 3つのウィンドウ</span></a></li>
+          <li><a href="#basic" class="toc-link"><span>02. 基本構成</span></a></li>
+          <li><a href="#flow" class="toc-link"><span>03. 進行と編集</span></a></li>
+          <li><a href="#admin" class="toc-link"><span>04. 管理エリア</span></a></li>
+          <li><a href="#timer" class="toc-link"><span>05. タイマー</span></a></li>
+          <li><a href="#audio" class="toc-link"><span>06. 音響</span></a></li>
+          <li><a href="#script" class="toc-link"><span>07. 台本帯</span></a></li>
+          <li><a href="#examples" class="toc-link"><span>08. 設定例</span></a></li>
+          <li><a href="#run-shortcuts" class="toc-link"><span>09. キーボード操作</span></a></li>
+        </ul>
+
+        <!-- TOC 編集マニュアル用 -->
+        <ul class="toc-list" id="tocEdit" style="display: none;">
+          <li><a href="#edit-overview" class="toc-link"><span>01. EDIT概要</span></a></li>
+          <li><a href="#edit-phase" class="toc-link"><span>02. フェーズ構成</span></a></li>
+          <li><a href="#edit-editor" class="toc-link"><span>03. 台本エディタ</span></a></li>
+          <li><a href="#edit-media" class="toc-link"><span>04. メディア連携</span></a></li>
+          <li><a href="#edit-audio" class="toc-link"><span>05. 音響設定</span></a></li>
+          <li><a href="#edit-timer" class="toc-link"><span>06. タイマー＆ラップ</span></a></li>
+          <li><a href="#edit-export" class="toc-link"><span>07. 保存と出力</span></a></li>
+          <li><a href="#edit-shortcuts" class="toc-link"><span>08. キーボード操作</span></a></li>
+        </ul>
+
+        <!-- TOC 子ウィンドウマニュアル用 -->
+        <ul class="toc-list" id="tocSync" style="display: none;">
+          <li><a href="#sync-overview" class="toc-link"><span>01. 子画面概要</span></a></li>
+          <li><a href="#sync-connect" class="toc-link"><span>02. 接続とライブ同期</span></a></li>
+          <li><a href="#sync-configs" class="toc-link"><span>03. 環境別・構成例</span></a></li>
+          <li><a href="#sync-control" class="toc-link"><span>04. 集中制御と表示</span></a></li>
+          <li><a href="#sync-media" class="toc-link"><span>05. 動的メディア連動</span></a></li>
+        </ul>
+      </div>
+
+      <div class="rail-bottom">
+        <p class="rail-note" id="railNoteRun">初回利用時は、1から順に読み、タイマーと音響の設定例を自分のシナリオへ当てはめてください。</p>
+        <p class="rail-note" id="railNoteEdit" style="display: none;">シナリオ作者・GM向け。セッション前にフェーズ、音源、タイマーラップ、台本を準備・校正するマニュアルです。</p>
+        <p class="rail-note" id="railNoteSync" style="display: none;">プレイヤーや観覧者、配信画面向けの「子ウィンドウ」の起動・接続・複数デバイス構成のマニュアルです。</p>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main>
+      <!-- ================= 進行マニュアル VIEW ================= -->
+      <div id="manualViewRun" class="manual-view">
+        <header class="main-title">
+          <div class="en">RUN MODE MANUAL</div>
+          <div class="jp">セッション進行・タイマー操作・画面同期完全ガイド</div>
+        </header>
+
+        <div class="divider"></div>
+
+        <!-- 01. 3つのウィンドウ -->
+        <section class="section" id="win3">
+          <span class="section-num">SECTION 01</span>
+          <h2 class="section-title">3つのウィンドウ</h2>
+          <p class="section-desc">CueBookは、進行ウィンドウ、編集ウィンドウ、子ウィンドウの3つで構成されます。</p>
+
+          <figure>
+            <img src="https://github.com/yproxy-wq/MDMS_CueBook/blob/main/01-3windows.png?raw=true" alt="3つのウィンドウ" referrerpolicy="no-referrer">
+            <figcaption>3つのウィンドウ構成（進行ウィンドウ、編集ウィンドウ、子ウィンドウ）</figcaption>
+          </figure>
+
+          <div class="grid-3">
+            <article class="card">
+              <span class="tag">CONSOLE</span>
+              <h3>進行ウィンドウ</h3>
+              <p>シナリオ進行中に使う画面です。フェーズ切替、台本表示、音源再生、タイマーと子ウィンドウの管理を行います。</p>
+            </article>
+            <article class="card">
+              <span class="tag">EDITOR</span>
+              <h3>編集ウィンドウ</h3>
+              <p>GM台本、フェーズ、タイマー、音源を準備します。設定一式は .cuebook としてエクスポートできます。</p>
+            </article>
+
+            <article class="card">
+              <span class="tag">DISPLAY</span>
+              <h3>子ウィンドウ</h3>
+              <p>タイマー、画像、動画を外部画面へ表示します。Googleログインと、両画面のインターネット接続が必要です。</p>
+            </article>
+          </div>
+        </section>
+
+        <!-- 02. 基本構成 -->
+        <section class="section" id="basic">
+          <span class="section-num">SECTION 02</span>
+          <h2 class="section-title">基本構成</h2>
+          <p class="section-desc">タブレット縦持ち画面をベースに、上部・中部・下部の3エリアに機能を整理しています。</p>
+
+          <figure>
+            <img src="https://github.com/yproxy-wq/MDMS_CueBook/blob/main/00-gamen-kousei.png?raw=true" alt="画面構成" referrerpolicy="no-referrer">
+            <figcaption>CueBookの基本画面レイアウト（管理エリアと台本エリア）</figcaption>
+          </figure>
+
+          <div class="grid-2">
+            <article class="card">
+              <h3>上部：タイマーと進捗バー</h3>
+              <p>現在の進行状態、PL公開タイマー、遅延/前倒し状態を一目で把握できます。</p>
+            </article>
+            <article class="card">
+              <h3>中部：音響パレット</h3>
+              <p>即座に再生可能なBGM/SEパレット。フェーズ連動音源の切り替えや音量調整が行えます。</p>
+            </article>
+          </div>
+        </section>
+
+        <!-- 03. 進行と編集 -->
+        <section class="section" id="flow">
+          <span class="section-num">SECTION 03</span>
+          <h2 class="section-title">進行と編集のモード切替</h2>
+          <p class="section-desc">進行ウィンドウ（SESSIONモード）と編集ウィンドウ（EDITモード）をワンタップで切り替え可能です。</p>
+
+          <figure>
+            <img src="https://github.com/yproxy-wq/MDMS_CueBook/blob/main/Hum-menu.png?raw=true" alt="設定・管理メニュー" referrerpolicy="no-referrer">
+            <figcaption>サイドナビゲーション・設定メニュー</figcaption>
+          </figure>
+
+          <div class="grid-2">
+            <article class="card">
+              <h3>進行ウィンドウ（SESSION）</h3>
+              <p>セッション本番用。誤操作を防ぎながら、快適な進行を実現します。</p>
+            </article>
+            <article class="card">
+              <h3>編集ウィンドウ（EDIT）</h3>
+              <p>シナリオ構築用。ブロック単位のドラッグ＆ドロップ編集、音源URLの割り当てが可能です。</p>
+            </article>
+          </div>
+        </section>
+
+        <!-- 04. 管理エリア -->
+        <section class="section" id="admin">
+          <span class="section-num">SECTION 04</span>
+          <h2 class="section-title">管理エリア</h2>
+          <p class="section-desc">キャラクターハンドアウト、同期ウィンドウ（子画面）の設定、バックアップを一元管理します。</p>
+
+          <figure>
+            <img src="https://github.com/yproxy-wq/MDMS_CueBook/blob/main/10-kanri-menu.png?raw=true" alt="管理メニューバー" referrerpolicy="no-referrer">
+            <figcaption>上部管理バー（時刻、音量、フェーズ切替、タイマー操作、設定）</figcaption>
+          </figure>
+
+          <figure>
+            <img src="https://github.com/yproxy-wq/MDMS_CueBook/blob/main/20-gentai.png?raw=true" alt="現在時刻と退出時刻" referrerpolicy="no-referrer">
+            <figcaption>現在時刻および目標退出時刻のモニタリング</figcaption>
+          </figure>
+        </section>
+
+        <!-- 05. タイマー -->
+        <section class="section" id="timer">
+          <span class="section-num">SECTION 05</span>
+          <h2 class="section-title">タイマーと進行予実管理</h2>
+          <p class="section-desc">フェーズ予定時間は、プレイヤーへ見せる時間と、GM側で確保する余白を合わせたものです。</p>
+
+          <figure>
+            <img src="https://github.com/yproxy-wq/MDMS_CueBook/blob/main/40-Phase-console.png?raw=true" alt="フェーズ操作コンソール" referrerpolicy="no-referrer">
+            <figcaption>フェーズ操作アイコン（カウントリセット、カウント開始/一時停止、フェーズ終了フラグ）</figcaption>
+          </figure>
+
+          <figure>
+            <img src="https://github.com/yproxy-wq/MDMS_CueBook/blob/main/42-phase-nakami.png?raw=true" alt="フェーズ予定時間とバッファ" referrerpolicy="no-referrer">
+            <figcaption>フェーズ予定時間（タイマーカウント時間 ＋ バッファ時間）</figcaption>
+          </figure>
+
+          <div class="grid-2">
+            <article class="card">
+              <h3>PL公開タイマー時間</h3>
+              <p>同期画面でプレイヤーへ見せる議論、探索、相談の時間です。再生、停止、延長はGMが管理します。</p>
+            </article>
+            <article class="card">
+              <h3>バッファ時間</h3>
+              <p>ナレーション、カード配布、確認の手戻りを吸収する、プレイヤーには見せない余白です。</p>
+            </article>
+          </div>
+
+          <div class="callout">
+            <strong>自動予実管理</strong>
+            フェーズを跨ぐたびに予定と実績を積み上げ、全体が何分遅れているか、どれだけ前倒しで進んでいるかを算出します。
+          </div>
+
+          <details open>
+            <summary>タイマーの操作手順</summary>
+            <p>フェーズ名をタップすると、リセット、カウント開始/一時停止、フェーズ完了フラグの3つの操作アイコンが表示されます。</p>
+          </details>
+        </section>
+
+        <!-- 06. 音響 -->
+        <section class="section" id="audio">
+          <span class="section-num">SECTION 06</span>
+          <h2 class="section-title">音響と音量演出</h2>
+          <p class="section-desc">アップロードし、フェードやループを設定した音源を、進行ウィンドウから即座に操作します。</p>
+
+          <figure>
+            <img src="https://github.com/yproxy-wq/MDMS_CueBook/blob/main/30-oncho.png?raw=true" alt="音量調整コントロール" referrerpolicy="no-referrer">
+            <figcaption>音量調整パネル（通常音量 / 音量半減 / BGM・VOICE個別指定）</figcaption>
+          </figure>
+
+          <div class="grid-2">
+            <article class="card">
+              <h3>自動クロスフェード</h3>
+              <p>BGM切替時に音がぶつからないよう、各音源へフェードインとフェードアウトを設定できます。</p>
+            </article>
+            <article class="card">
+              <h3>マスターボリューム</h3>
+              <p>とっさの音量調整が必要なときは、個別音源または上部のボリューム設定から調整します。</p>
+            </article>
+          </div>
+        </section>
+
+        <!-- 07. 台本帯 -->
+        <section class="section" id="script">
+          <span class="section-num">SECTION 07</span>
+          <h2 class="section-title">下半面の台本帯</h2>
+          <p class="section-desc">下半面は読むための空間です。情報を色分けと折りたたみで整理しておくと、縦持ちでも読み進めやすくなります。</p>
+
+          <div class="grid-3">
+            <article class="card">
+              <h3>カラー着色</h3>
+              <p>強調したいセリフ、秘密情報、GM専用注意書きを色分けして判別できます。</p>
+            </article>
+            <article class="card">
+              <h3>折りたたみブロック</h3>
+              <p>分岐や補足情報を必要なときだけ開き、縦スクロール量を抑えます。</p>
+            </article>
+            <article class="card">
+              <h3>PC一覧と同期トリガー</h3>
+              <p>PC一覧ではプレイヤー名やフラグを管理します。<code>[[image_id]]</code> を台本へ差し込むと、プレイヤー画面へ画像を同期表示できます。</p>
+            </article>
+          </div>
+        </section>
+
+        <!-- 08. 設定例 -->
+        <section class="section" id="examples">
+          <span class="section-num">SECTION 08</span>
+          <h2 class="section-title">設定例</h2>
+
+          <div class="grid-2">
+            <article class="card">
+              <h3>10分ごとに調査を1回可能</h3>
+              <p>ラップを10分ごとに設定します。フェーズ全体が30分なら、PL公開タイマーは30分、必要ならバッファを数分追加します。</p>
+              <figure>
+                <img src="https://raw.githubusercontent.com/yproxy-wq/MDMS_CueBook/refs/heads/main/6steps.png" alt="10分ごとの調査フロー" referrerpolicy="no-referrer">
+              </figure>
+            </article>
+            <article class="card">
+              <h3>議論は20分、延長はGM判断で5分だけ</h3>
+              <p>PL公開タイマーを20分、バッファを5分にします。延長が必要なときだけ、GM側で追加して運用します。</p>
+            </article>
+            <article class="card">
+              <h3>BGMを場面切替で自然に変えたい</h3>
+              <p>編集ウィンドウで各音源にフェードインとフェードアウトを設定します。クロスフェード前提で登録します。</p>
+            </article>
+            <article class="card">
+              <h3>ループさせたい環境音を流し続けたい</h3>
+              <p>対象音源でループを有効にします。必要に応じてマスターボリューム側で全体音量だけ調整します。</p>
+            </article>
+          </div>
+        </section>
+
+        <!-- 09. キーボード操作（爆速セッション進行） -->
+        <section class="section" id="run-shortcuts">
+          <span class="section-num">SECTION 09</span>
+          <h2 class="section-title">キーボードショートカット（爆速セッション操作）</h2>
+          <p class="section-desc">
+            CueBookは、セッション進行中にマウスを頻繁に動かすストレスを解消するため、直感的なキーボードショートカットを備えています。テキスト入力時以外の誤作動を防ぐ「安全保護ガード」が組み込まれており、安心してワンキー操作が可能です。
+          </p>
+
+          <div class="card">
+            <h3>デフォルト・ショートカット早見表</h3>
+            <div style="overflow-x: auto; margin-top: 12px;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: left;">
+                <thead>
+                  <tr style="border-bottom: 2px solid rgba(255,255,255,0.15); color: #d4af37;">
+                    <th style="padding: 8px;">キー入力</th>
+                    <th style="padding: 8px;">操作機能</th>
+                    <th style="padding: 8px;">解説・ポイント</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 8px;"><code style="background: rgba(212,175,55,0.15); color: #f3e5ab; padding: 2px 6px; rounded: 4px; border: 1px solid rgba(212,175,55,0.3);">m</code></td>
+                    <td style="padding: 8px;"><b>BGM 再生 / 一時停止</b></td>
+                    <td style="padding: 8px; color: #a1a1aa;">進行中のBGMを一発で再生・一時停止します。</td>
+                  </tr>
+                  <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 8px;"><code style="background: rgba(212,175,55,0.15); color: #f3e5ab; padding: 2px 6px; rounded: 4px; border: 1px solid rgba(212,175,55,0.3);">k</code></td>
+                    <td style="padding: 8px;"><b>SE音源 一括停止 / 再生</b></td>
+                    <td style="padding: 8px; color: #a1a1aa;">鳴っている効果音（SE）を緊急停止または即時発声します。</td>
+                  </tr>
+                  <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 8px;"><code style="background: rgba(212,175,55,0.15); color: #f3e5ab; padding: 2px 6px; rounded: 4px; border: 1px solid rgba(212,175,55,0.3);">[</code> / <code style="background: rgba(212,175,55,0.15); color: #f3e5ab; padding: 2px 6px; rounded: 4px; border: 1px solid rgba(212,175,55,0.3);">]</code></td>
+                    <td style="padding: 8px;"><b>子画面 連動メディア 前/次</b></td>
+                    <td style="padding: 8px; color: #a1a1aa;">子画面（Sync Window）に投影中の画像を前後に切り替えます。</td>
+                  </tr>
+                  <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 8px;"><code style="background: rgba(255,255,255,0.1); color: #e4e4e7; padding: 2px 6px; rounded: 4px;">Ctrl+Alt+1~9</code> / <code style="background: rgba(212,175,55,0.15); color: #f3e5ab; padding: 2px 6px; rounded: 4px; border: 1px solid rgba(212,175,55,0.3);">1~9</code></td>
+                    <td style="padding: 8px;"><b>指定番号画像のダイレクト送出</b></td>
+                    <td style="padding: 8px; color: #a1a1aa;">#1 〜 #9 番目の登録画像へ一発でダイレクト切替・投影します。</td>
+                  </tr>
+                  <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 8px;"><code style="background: rgba(212,175,55,0.15); color: #f3e5ab; padding: 2px 6px; rounded: 4px; border: 1px solid rgba(212,175,55,0.3);">Space</code></td>
+                    <td style="padding: 8px;"><b>タイマー スタート / スタップ</b></td>
+                    <td style="padding: 8px; color: #a1a1aa;">アクティブタイマーのカウントダウンを一括操作します。</td>
+                  </tr>
+                  <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 8px;"><code style="background: rgba(255,255,255,0.1); color: #e4e4e7; padding: 2px 6px; rounded: 4px;">Ctrl + Alt + Q</code></td>
+                    <td style="padding: 8px;"><b>クイックアクションパレット</b></td>
+                    <td style="padding: 8px; color: #a1a1aa;">コマンド検索＆瞬時実行ダイアログを起動します。</td>
+                  </tr>
+                  <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 8px;"><code style="background: rgba(255,255,255,0.1); color: #e4e4e7; padding: 2px 6px; rounded: 4px;">Ctrl + Alt + N / P</code></td>
+                    <td style="padding: 8px;"><b>フェーズ送出 次 / 前</b></td>
+                    <td style="padding: 8px; color: #a1a1aa;">シナリオ進行のフェーズを前後に進めます。</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px;"><code style="background: rgba(255,255,255,0.1); color: #e4e4e7; padding: 2px 6px; rounded: 4px;">Ctrl + Alt + W</code></td>
+                    <td style="padding: 8px;"><b>子画面 (Sync Studio) 開閉</b></td>
+                    <td style="padding: 8px; color: #a1a1aa;">プレイヤー用同期設定モーダルを一発で表示・格納します。</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ================= 編集マニュアル VIEW ================= -->
+      <div id="manualViewEdit" class="manual-view" style="display: none;">
+        <header class="main-title">
+          <div class="en">EDIT MODE MANUAL</div>
+          <div class="jp">シナリオ構築・台本装飾・音響タイマープリセット完全ガイド</div>
+        </header>
+
+        <div class="divider"></div>
+
+        <!-- Section 01: Overview -->
+        <section id="edit-overview" class="section">
+          <span class="section-num">SECTION 01</span>
+          <h2 class="section-title">EDITモードの役割と画面構成</h2>
+          <p class="section-desc">
+            CueBookは「セッション実行時の誤操作防止」のため、卓で使う進行画面（RUNモード）と、シナリオを事前構築する編集画面（EDITモード）が完全に分かれています。EDITモードでは、フェーズ構造、Markdown台本、BGM/SEの初期設定、タイマーラップメッセージを直感的に設定できます。
+          </p>
+
+          <div class="image-placeholder">
+            <div class="image-placeholder-tag">IMAGE PLACEHOLDER: 01</div>
+            <div class="image-placeholder-desc">
+              【EDITモード画面構成】ヘッダーのアクションバー（モード切替/保存）、左側のPhase（フェーズ管理）リスト、中央のEasyEditorBlock（1クリックMarkdown装飾ツールバー付き台本エディタ）、右側の音響・タイマープリセット・ハンドアウト編集エリア。
+            </div>
+          </div>
+
+          <div class="grid-3">
+            <article class="card">
+              <span class="tag">STRUCTURE</span>
+              <h3>フェーズ構造化</h3>
+              <p>オープニング、調査、議論、エンディングといった卓の進行ステップを独立したフェーズとして定義します。</p>
+            </article>
+            <article class="card">
+              <span class="tag">VISUAL</span>
+              <h3>高機能台本エディタ</h3>
+              <p>1クリックツールバーで太字、文字色、テーブル、折り畳みアコーディオン（&lt;details&gt;）を簡単に記述可能です。</p>
+            </article>
+            <article class="card">
+              <span class="tag">AUTOMATION</span>
+              <h3>音響・タイマー連動</h3>
+              <p>フェーズ切替時の自動BGM変更や、指定残り時間で鳴るラップチャイムとPL向け通知メッセージを紐付けます。</p>
+            </article>
+          </div>
+        </section>
+
+        <!-- Section 02: Phase Management -->
+        <section id="edit-phase" class="section">
+          <span class="section-num">SECTION 02</span>
+          <h2 class="section-title">フェーズ（進行ステップ）の構成と並び替え</h2>
+          <p class="section-desc">
+            マーダーミステリーやTRPGのセッション進行は「フェーズ」単位で管理されます。各フェーズには「タイトル」「制限時間（タイマー初期値）」「個別台本」「BGMプリセット」を設定できます。
+          </p>
+
+          <div class="image-placeholder">
+            <div class="image-placeholder-tag">IMAGE PLACEHOLDER: 02</div>
+            <div class="image-placeholder-desc">
+              【フェーズ作成と並び替え】「+ フェーズ追加」ボタンの操作、ドラッグ＆ドロップまたは上下矢印による並び替え、フェーズ名および目標時間（分・秒）の個別設定フォーム。
+            </div>
+          </div>
+
+          <div class="step-list">
+            <div class="step-item">
+              <div class="step-badge">1</div>
+              <div class="step-content">
+                <h4>フェーズの新規追加・複製</h4>
+                <p>左側パネルの「+ 新しいフェーズ」を押して作成します。似た構成のフェーズは「複製」ボタン1クリックでコピー可能です。</p>
+              </div>
+            </div>
+            <div class="step-item">
+              <div class="step-badge">2</div>
+              <div class="step-content">
+                <h4>制限時間（タイマー基準値）の設定</h4>
+                <p>「15:00」「05:00」のようにカウントダウンの初期値を設定。ここで設定した時間がRUNモード移行時のタイマーのデフォルトになります。</p>
+              </div>
+            </div>
+            <div class="step-item">
+              <div class="step-badge">3</div>
+              <div class="step-content">
+                <h4>ドラッグ＆ドロップによる順序変更</h4>
+                <p>各フェーズカードの左端アイコンをドラッグするか、上下移動ボタンで自由に進む順番を入れ替えできます。</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section 03: Script Editor -->
+        <section id="edit-editor" class="section">
+          <span class="section-num">SECTION 03</span>
+          <h2 class="section-title">台本エディタ（EasyEditorBlock）の使い方</h2>
+          <p class="section-desc">
+            CueBook自慢の「EasyEditorBlock」は、Markdown構文を直感的なツールバーボタンで入力できる最新エディタです。テキストのデバウンス処理（400ms）により入力の遅延を防ぎ、快適な記述を実現します。
+          </p>
+
+          <div class="image-placeholder">
+            <div class="image-placeholder-tag">IMAGE PLACEHOLDER: 03</div>
+            <div class="image-placeholder-desc">
+              【台本エディタとツールバー】太字、斜体、打ち消し、見出し、引用、カラー選択ドロップダウン、折り畳み（details）ボタンが並ぶツールバーとリアルタイムMarkdownプレビュー。
+            </div>
+          </div>
+
+          <table class="feature-table">
+            <thead>
+              <tr>
+                <th>ツールバー機能</th>
+                <th>挿入される表記 / タグ</th>
+                <th>用途・GM効果</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>カラー文字</strong></td>
+                <td><code>[強調テキスト](color:#a855f7)</code></td>
+                <td>GMのナレーション指定、重要キーワードや注意書きの強調。</td>
+              </tr>
+              <tr>
+                <td><strong>折り畳み (Accordion)</strong></td>
+                <td><code>&lt;details&gt;&lt;summary&gt;<b>題名</b>&lt;/summary&gt;隠す内容&lt;/details&gt;</code></td>
+                <td>真相・犯人指定・サブプロットなど、GM視界を整理するアコーディオン。</td>
+              </tr>
+              <tr>
+                <td><strong>見出し (Heading)</strong></td>
+                <td><code># 見出し1</code>, <code>## 見出し2</code></td>
+                <td>台本内の章立てやセクション区切り。</td>
+              </tr>
+              <tr>
+                <td><strong>表組 (Table)</strong></td>
+                <td><code>| 項目 | 内容 |</code></td>
+                <td>プレイヤーの手がかり一覧や初期配置表の整理。</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- Section 04: Media & Image Tag -->
+        <section id="edit-media" class="section">
+          <span class="section-num">SECTION 04</span>
+          <h2 class="section-title">メディア連携と画像参照タグ（[[image_id]]）</h2>
+          <p class="section-desc">
+            台本中に画像やハンドアウトカードを埋め込む際、メディアライブラリの `[[image_id]]` タグを利用すると、プレビューや同期ウィンドウ（Sync Studio）へ高精度にリアルタイム画像を表示できます。
+          </p>
+
+          <div class="image-placeholder">
+            <div class="image-placeholder-tag">IMAGE PLACEHOLDER: 04</div>
+            <div class="image-placeholder-desc">
+              【メディアオーバーレイ】エディタ内の「画像参照」ボタンクリックで起動する選択ダイアログ。[[image_01]] のようなタグが自動生成・挿入され、PL同期ウィンドウにも即時連動する様子。
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <article class="card">
+              <h3>画像登録とURL入力</h3>
+              <p>ローカル画像ファイル（ドラッグ＆ドロップ）または外部画像URL（Dropbox, Gyazo, Google Drive直リンク等）を登録できます。</p>
+            </article>
+            <article class="card">
+              <h3>[[image_id]] 動的同期タグ</h3>
+              <p>台本テキスト中に <code>[[img_map_01]]</code> と書くだけで、GM台本および子画面（Sync Studio）に該当画像が自動描画されます。</p>
+            </article>
+          </div>
+        </section>
+
+        <!-- Section 05: Audio Configuration -->
+        <section id="edit-audio" class="section">
+          <span class="section-num">SECTION 05</span>
+          <h2 class="section-title">音響（BGM / SE）ライブラリの登録と初期設定</h2>
+          <p class="section-desc">
+            `AudioService.ts` シングルトンにより、音声バッファは事前にバックグラウンドキャッシュされます。EDITモードで登録した各トラックは、セッション進行中にノーレイテンシーで再生可能です。
+          </p>
+
+          <div class="image-placeholder">
+            <div class="image-placeholder-tag">IMAGE PLACEHOLDER: 05</div>
+            <div class="image-placeholder-desc">
+              【音響登録パネル】トラック名、音源URLの入力フィールド、デフォルト音量スライダー、Loop（ループ再生）トグル、フェードイン/フェードアウト秒数設定フォーム。
+            </div>
+          </div>
+
+          <div class="step-list">
+            <div class="step-item">
+              <div class="step-badge">1</div>
+              <div class="step-content">
+                <h4>トラック追加と直リンク指定</h4>
+                <p>BGMまたはSEとしてトラックを追加。MP3/WAV/AAC形式のダイレクトURL（例: MP3直リンク）を入力します。</p>
+              </div>
+            </div>
+            <div class="step-item">
+              <div class="step-badge">2</div>
+              <div class="step-content">
+                <h4>ループとフェード時間</h4>
+                <p>BGMは「Loop」をONに。フェードイン・フェードアウト秒数（推奨: 2.0s〜3.0s）を指定することで、場面転換が劇的に美しくなります。</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section 06: Timer & Wrap Notification -->
+        <section id="edit-timer" class="section">
+          <span class="section-num">SECTION 06</span>
+          <h2 class="section-title">タイマーとラップポイント（最大16点）の設定</h2>
+          <p class="section-desc">
+            各フェーズのタイマーには、経過時間・残り時間に応じた「ラップポイント」を最大16箇所設定できます。指定時間になると専用チャイムが鳴り、同期ウィンドウ（PL画面）にメッセージバナーを自動表示します。
+          </p>
+
+          <div class="image-placeholder">
+            <div class="image-placeholder-tag">IMAGE PLACEHOLDER: 06</div>
+            <div class="image-placeholder-desc">
+              【ラップタイム追加設定】「残り5分：【警告】全体議論の終了5分前です」「残り1分：【重要】最終推理の準備をしてください」といった個別の通知文面とチャイム音のプリセット指定。
+            </div>
+          </div>
+
+          <details>
+            <summary><b>ラップポイント設定のベストプラクティス</b></summary>
+            <p>
+              ・<b>残り5分</b>：チャイム「Chime A」＋通知テキスト『残り5分です。立証の手がかりを整理してください。』<br>
+              ・<b>残り1分</b>：チャイム「Warning Signal」＋通知テキスト『残り1分！投票先を決めてください。』<br>
+              これにより、GMがいちいち声を出してアナウンスしなくても、PL全員の画面にスマートに警告が表示されます。
+            </p>
+          </details>
+        </section>
+
+        <!-- Section 07: Save & Export -->
+        <section id="edit-export" class="section">
+          <span class="section-num">SECTION 07</span>
+          <h2 class="section-title">シナリオの保存とエクスポート (.cuebook)</h2>
+          <p class="section-desc">
+            作成したシナリオデータは、軽量な `.cuebook` ファイル（JSON形式）としてPC・タブレットへエクスポートできます。また、Firestoreバックアップ同期により、別端末への引継ぎも即座に行えます。
+          </p>
+
+          <div class="grid-2">
+            <article class="card">
+              <h3>.cuebook ファイル出力</h3>
+              <p>ヘッダーの「保存 / エクスポート」ボタンを押すと、すべてのフェーズ・台本・音響設定が入った完全なバックアップファイルが保存されます。</p>
+            </article>
+            <article class="card">
+              <h3>シナリオ読み込み (Import)</h3>
+              <p>自作シナリオや他者が作成した `.cuebook` ファイルをドラッグ＆ドロップするだけで、一瞬で全環境が復元されます。</p>
+            </article>
+          </div>
+        </section>
+
+        <!-- Section 08: Shortcuts & Customization -->
+        <section id="edit-shortcuts" class="section">
+          <span class="section-num">SECTION 08</span>
+          <h2 class="section-title">キーボードショートカット & キー割り当てカスタマイズ</h2>
+          <p class="section-desc">
+            進行役（GM）の操作性とスピードを極限まで高めるため、直感的なキーボードショートカットを提供しています。お使いのキーボード環境に合わせてキーアサインを自由に編集することも可能です。
+          </p>
+
+          <div class="grid-2">
+            <article class="card">
+              <h3>ショートカットキーガイドモーダル</h3>
+              <p>ヘッダー右上やツールバーにある<b>キーボードアイコン</b>をクリックするか、<code>Ctrl + Alt + Q</code> のクイックパレットから「ショートカットキー一覧」を即座にポップアップ起動できます。</p>
+            </article>
+            <article class="card">
+              <h3>環境設定でのキーカスタム</h3>
+              <p>「環境設定（Preferences）」の「キーボード設定」から、BGM/SE/メディア/タイマー操作の各ショートカットキーを自分好みのキーに直接再登録可能です。</p>
+            </article>
+            <article class="card">
+              <h3>安全保護（テキスト入力衝突防止）</h3>
+              <p>台本エディタや各種検索フォームへの入力中（Focus時）は自動的にショートカット機能がオフになり、キー入力による誤作動を完全にガードします。</p>
+            </article>
+            <article class="card">
+              <h3>ワンキーによる爆速コントロール</h3>
+              <p>デフォルトでは <code>m</code> でBGMトグル、<code>k</code> でSE一括停止、<code>[</code> / <code>]</code> で子画面メディア切替、<code>Space</code> でタイマー発動が可能です。</p>
+            </article>
+          </div>
+
+          <div class="image-placeholder">
+            <div class="image-placeholder-tag">IMAGE PLACEHOLDER: EDIT-08</div>
+            <div class="image-placeholder-desc">
+              【ショートカットガイド＆キーカスタムUI】ヘッダーから起動可能なショートカット一覧モーダルと、環境設定におけるワンタップキー再割り当て（Key Binding）画面のキャプチャ。
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ================= 子ウィンドウマニュアル VIEW ================= -->
+      <div id="manualViewSync" class="manual-view" style="display: none;">
+        <header class="main-title">
+          <div class="en">SYNC WINDOW MANUAL</div>
+          <div class="jp">子ウィンドウ（リアルタイム同期表示画面）活用・環境別構成完全ガイド</div>
+        </header>
+
+        <div class="divider"></div>
+
+        <!-- Section 01: 子画面概要 -->
+        <section id="sync-overview" class="section">
+          <span class="section-num">SECTION 01</span>
+          <h2 class="section-title">子ウィンドウ（リアルタイム同期表示）とは</h2>
+          <p class="section-desc">
+            子ウィンドウ（Sync Studio）は、進行ウィンドウからの操作（タイマーカウント、進行フェーズ切り替え、演出画像、ハンドアウト、ラップ警告等）をミリ秒単位で自動同期して表示する、プレイヤー・観覧者・配信画面専用の表示用画面です。
+          </p>
+
+          <div class="image-placeholder">
+            <div class="image-placeholder-tag">IMAGE PLACEHOLDER: SYNC-01</div>
+            <div class="image-placeholder-desc">
+              【子ウィンドウ（Sync Studio）と進行ウィンドウの連動イメージ】メイン端末の進行ウィンドウで操作したタイマー、フェーズ名、背景画像、ラップ警告バナーが、子ウィンドウ側へ即座に美しく同期表示されている状態。
+            </div>
+          </div>
+
+          <div class="grid-3">
+            <article class="card">
+              <span class="tag">REAL-TIME SYNC</span>
+              <h3>高精度タイマー同期</h3>
+              <p>ドリフト補正エンジンにより、全デバイス間で1秒未満の狂いなくカウントダウンを同期・維持します。</p>
+            </article>
+            <article class="card">
+              <span class="tag">MEDIA LINK</span>
+              <h3>動的メディア・画像連動</h3>
+              <p>台本中に埋め込まれた画像タグ (`[[image_id]]`) に応じて、適切な画像やマップが自動描画されます。</p>
+            </article>
+            <article class="card">
+              <span class="tag">REMOTE CONTROL</span>
+              <h3>進行ウィンドウからの集中制御</h3>
+              <p>画面の要素表示（Visible/Hidden）、配置（Top/Bottom）、拡縮（FILL/WIDTH/HEIGHT）を進行側から遠隔操作可能。</p>
+            </article>
+          </div>
+        </section>
+
+        <!-- Section 02: 接続とライブ同期 -->
+        <section id="sync-connect" class="section">
+          <span class="section-num">SECTION 02</span>
+          <h2 class="section-title">接続方法とリアルタイム同期手順</h2>
+          <p class="section-desc">
+            進行ウィンドウの上部管理バーにある「Sync Studio（同期ウィンドウ設定）」モーダルから、ワンタッチで子ウィンドウのアクセスURLを発行できます。
+          </p>
+
+          <div class="image-placeholder">
+            <div class="image-placeholder-tag">IMAGE PLACEHOLDER: SYNC-02</div>
+            <div class="image-placeholder-desc">
+              【集中制御パネル（Sync Studio Modal）】進行ウィンドウからQRコード表示、専用アクセスURLのコピー、ライブプレビュー確認、タイマー再生/停止、レイアウト拡縮トグルを遠隔操作している画面。
+            </div>
+          </div>
+
+          <div class="step-list">
+            <div class="step-item">
+              <div class="step-badge">1</div>
+              <div class="step-content">
+                <h4>Sync Studio モーダルを起動</h4>
+                <p>進行ウィンドウ上部の管理メニューから「同期」アイコンをクリックし、集中制御パネルを開きます。</p>
+              </div>
+            </div>
+            <div class="step-item">
+              <div class="step-badge">2</div>
+              <div class="step-content">
+                <h4>URL共有またはQRコード読み取り</h4>
+                <p>表示されたQRコードを子ウィンドウ表示用デバイスで読み取るか、アクセスURLをコピーしてブラウザで開きます。</p>
+              </div>
+            </div>
+            <div class="step-item">
+              <div class="step-badge">3</div>
+              <div class="step-content">
+                <h4>Firestore経由の自動同期開始</h4>
+                <p>子ウィンドウが開くと自動的にクラウドデータベースへ接続され、現在の進行状態・タイマー・画像が即座に展開されます。</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section 03: 環境別・構成例 -->
+        <section id="sync-configs" class="section">
+          <span class="section-num">SECTION 03</span>
+          <h2 class="section-title">環境別の構成例（メイン端末 ＋ 子ウィンドウ表示デバイス）</h2>
+          <p class="section-desc">
+            セッションを行う環境や持ち込み機材に応じて、メイン端末（進行ウィンドウ）と子ウィンドウの表示デバイスをフレキシブルに組み合わせることができます。
+          </p>
+
+          <div class="image-placeholder">
+            <div class="image-placeholder-tag">IMAGE PLACEHOLDER: SYNC-03</div>
+            <div class="image-placeholder-desc">
+              【環境別構成パターン】①1台PC+サブモニター/配信キャプチャ、②PC+ネットワーク接続タブレット/スマートフォン、③端末+Miracast接続液晶モニターの3種類の構成パターン模式図。
+            </div>
+          </div>
+
+          <table class="feature-table">
+            <thead>
+              <tr>
+                <th style="width: 25%;">構成パターン</th>
+                <th style="width: 35%;">メイン端末（進行ウィンドウ）</th>
+                <th style="width: 40%;">子ウィンドウ表示デバイス</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>【構成1】1台PCで完結<br><small style="color:var(--color-muted);">マルチディスプレイ / OBS</small></strong></td>
+                <td>PC（ブラウザで進行ウィンドウを操作）</td>
+                <td>拡張サブモニター、または配信ソフト（OBS等）のブラウザソースとして子ウィンドウを開いてキャプチャ。</td>
+              </tr>
+              <tr>
+                <td><strong>【構成2】ネットワーク接続端末<br><small style="color:var(--color-muted);">タブレット / スマホ / 別PC</small></strong></td>
+                <td>メインPC（または進行用タブレット）</td>
+                <td>ネットワークにつながったタブレットやPC、スマートフォン等でQRコード/URLから子ウィンドウを開き、卓上や観覧場所へ設置。</td>
+              </tr>
+              <tr>
+                <td><strong>【構成3】単機能液晶 / 外部モニター<br><small style="color:var(--color-muted);">Miracast / AirPlay / 映像伝送</small></strong></td>
+                <td>メインPC（またはタブレット）</td>
+                <td>単機能の液晶モニターやテレビ等の場合、Miracast、AirPlay、またはワイヤレスHDMI/映像送信機等を用いてメイン端末から子ウィンドウ画面を出力・描画。</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="callout" style="margin-top: 1.5rem;">
+            <strong>環境に応じた最適な選択</strong>
+            対面セッションの卓上ディスプレイには【構成2】のタブレット設置が最適です。大型テレビや壁掛けモニターへの出力でネット接続機能がない単機能液晶を使う場合は、【構成3】のMiracastやHDMI延長出力を活用できます。
+          </div>
+        </section>
+
+        <!-- Section 04: 集中制御と表示設定 -->
+        <section id="sync-control" class="section">
+          <span class="section-num">SECTION 04</span>
+          <h2 class="section-title">集中制御パネルと表示カスタム</h2>
+          <p class="section-desc">
+            子ウィンドウ側に直接触れることなく、進行ウィンドウ（Sync Studio モーダル）からすべての表示状態をアクティブにコントロールできます。
+          </p>
+
+          <div class="image-placeholder">
+            <div class="image-placeholder-tag">IMAGE PLACEHOLDER: SYNC-04</div>
+            <div class="image-placeholder-desc">
+              【レイアウト＆表示遠隔コントロール】Sync Studio モーダル内のライブプレビュー枠と、表示位置（Top/Bottom）、サイズ（FILL/WIDTH/HEIGHT）、表示切り替え（タイマー/背景画像/通知バナー）のスイッチ群。
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <article class="card">
+              <h3>表示要素コントロール</h3>
+              <p>タイマー、背景画像、ラップ警告バナーの「Visible / Hidden」を個別に切り替え。演出意図に合わせて情報量を調整可能です。</p>
+            </article>
+            <article class="card">
+              <h3>画面配置と拡縮設定</h3>
+              <p>タイマーや情報の配置位置（Top / Bottom）や、画像のフィット方式（FILL / WIDTH / HEIGHT）をリアルタイムに変更できます。</p>
+            </article>
+          </div>
+        </section>
+
+        <!-- Section 05: 動的メディア連動 -->
+        <section id="sync-media" class="section">
+          <span class="section-num">SECTION 05</span>
+          <h2 class="section-title">台本タグ (`[[image_id]]`) による動的メディア連動</h2>
+          <p class="section-desc">
+            進行ウィンドウでGMが台本を進めるだけで、子ウィンドウ側に該当する地図・キャラクターイラスト・証拠品画像が即座にズームイン表示されます。
+          </p>
+
+          <div class="grid-2">
+            <article class="card">
+              <h3>オートフォーカス連動</h3>
+              <p>台本ブロック内に `[[img_map_01]]` と記述しておくだけで、そのブロックが進行画面でアクティブになった際、子ウィンドウへ自動描画されます。</p>
+            </article>
+            <article class="card">
+              <h3>手動ズーム＆全画面モード</h3>
+              <p>進行側で「メディア参照」ボタンを押して任意の画像をタップすることで、演出のタイミングに合わせて手動で子ウィンドウへ画像をカットインさせることも可能です。</p>
+            </article>
+          </div>
+        </section>
+      </div>
+
+      <footer>
+        <div id="footerLabelRun">CUEBOOK / RUN MODE MANUAL</div>
+        <div id="footerLabelEdit" style="display: none;">CUEBOOK / EDIT MODE MANUAL</div>
+        <div id="footerLabelSync" style="display: none;">CUEBOOK / SYNC WINDOW MANUAL</div>
+        <div>cuebook-system v0.97</div>
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    const themeToggle = document.getElementById('themeToggle');
+    const storedTheme = localStorage.getItem('cuebook-manual-a-theme');
+
+    function setTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      themeToggle.textContent = theme === 'dark' ? 'ライトモードに変更' : 'ダークモードに変更';
+      localStorage.setItem('cuebook-manual-a-theme', theme);
+    }
+
+    setTheme(storedTheme || 'dark');
+
+    themeToggle.addEventListener('click', () => {
+      const current = document.documentElement.dataset.theme;
+      setTheme(current === 'dark' ? 'light' : 'dark');
+    });
+
+    // View Elements
+    const btnRun = document.getElementById('btnRun');
+    const btnEdit = document.getElementById('btnEdit');
+    const btnSync = document.getElementById('btnSync');
+
+    const manualViewRun = document.getElementById('manualViewRun');
+    const manualViewEdit = document.getElementById('manualViewEdit');
+    const manualViewSync = document.getElementById('manualViewSync');
+
+    const tocRun = document.getElementById('tocRun');
+    const tocEdit = document.getElementById('tocEdit');
+    const tocSync = document.getElementById('tocSync');
+
+    const railNoteRun = document.getElementById('railNoteRun');
+    const railNoteEdit = document.getElementById('railNoteEdit');
+    const railNoteSync = document.getElementById('railNoteSync');
+
+    const footerLabelRun = document.getElementById('footerLabelRun');
+    const footerLabelEdit = document.getElementById('footerLabelEdit');
+    const footerLabelSync = document.getElementById('footerLabelSync');
+
+    function switchMode(mode, scrollToTop = false) {
+      // Reset active states
+      btnRun.classList.remove('active');
+      btnEdit.classList.remove('active');
+      if (btnSync) btnSync.classList.remove('active');
+
+      manualViewRun.style.display = 'none';
+      manualViewEdit.style.display = 'none';
+      if (manualViewSync) manualViewSync.style.display = 'none';
+
+      tocRun.style.display = 'none';
+      tocEdit.style.display = 'none';
+      if (tocSync) tocSync.style.display = 'none';
+
+      railNoteRun.style.display = 'none';
+      railNoteEdit.style.display = 'none';
+      if (railNoteSync) railNoteSync.style.display = 'none';
+
+      if (footerLabelRun) footerLabelRun.style.display = 'none';
+      if (footerLabelEdit) footerLabelEdit.style.display = 'none';
+      if (footerLabelSync) footerLabelSync.style.display = 'none';
+
+      if (mode === 'edit') {
+        btnEdit.classList.add('active');
+        manualViewEdit.style.display = 'block';
+        tocEdit.style.display = 'flex';
+        railNoteEdit.style.display = 'block';
+        if (footerLabelEdit) footerLabelEdit.style.display = 'block';
+
+        if (history.replaceState) {
+          history.replaceState(null, '', '#edit');
+        }
+      } else if (mode === 'sync') {
+        if (btnSync) btnSync.classList.add('active');
+        if (manualViewSync) manualViewSync.style.display = 'block';
+        if (tocSync) tocSync.style.display = 'flex';
+        if (railNoteSync) railNoteSync.style.display = 'block';
+        if (footerLabelSync) footerLabelSync.style.display = 'block';
+
+        if (history.replaceState) {
+          history.replaceState(null, '', '#sync');
+        }
+      } else {
+        btnRun.classList.add('active');
+        manualViewRun.style.display = 'block';
+        tocRun.style.display = 'flex';
+        railNoteRun.style.display = 'block';
+        if (footerLabelRun) footerLabelRun.style.display = 'block';
+
+        if (history.replaceState) {
+          history.replaceState(null, '', '#run');
+        }
+      }
+
+      if (scrollToTop) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+
+    btnRun.addEventListener('click', () => switchMode('run', true));
+    btnEdit.addEventListener('click', () => switchMode('edit', true));
+    if (btnSync) btnSync.addEventListener('click', () => switchMode('sync', true));
+
+    // Initial check on load
+    const initialHash = window.location.hash;
+    const urlParams = new URLSearchParams(window.location.search);
+    const modeParam = urlParams.get('mode');
+
+    if (initialHash.includes('edit') || modeParam === 'edit') {
+      switchMode('edit', false);
+    } else if (initialHash.includes('sync') || modeParam === 'sync') {
+      switchMode('sync', false);
+    } else {
+      switchMode('run', false);
+    }
+
+    // Active TOC scrollspy
+    window.addEventListener('scroll', () => {
+      let isMode = 'run';
+      if (btnEdit.classList.contains('active')) isMode = 'edit';
+      else if (btnSync && btnSync.classList.contains('active')) isMode = 'sync';
+
+      let activeView = manualViewRun;
+      let activeToc = tocRun;
+
+      if (isMode === 'edit') {
+        activeView = manualViewEdit;
+        activeToc = tocEdit;
+      } else if (isMode === 'sync') {
+        activeView = manualViewSync;
+        activeToc = tocSync;
+      }
+
+      const sections = activeView.querySelectorAll('.section');
+      const tocLinks = activeToc.querySelectorAll('.toc-link');
+
+      let current = '';
+      sections.forEach(sec => {
+        const top = sec.offsetTop;
+        if (window.pageYOffset >= top - 120) {
+          current = sec.getAttribute('id');
+        }
+      });
+
+      tocLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === `#${current}`) {
+          link.classList.add('active');
+        }
+      });
+    });
+  </script>
+</body>
+</html>

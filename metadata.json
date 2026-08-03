@@ -1,0 +1,8 @@
+{
+  "name": "CueBook",
+  "description": "A comprehensive Murder Mystery GM support dashboard featuring integrated soundboard control, phase-linked script guidance, and automated audio effects.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

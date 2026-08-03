@@ -1,0 +1,76 @@
+{
+  "entities": {
+    "TimerSession": {
+      "title": "TimerSession",
+      "description": "Real-time state of a shared timer",
+      "type": "object",
+      "properties": {
+        "scenarioId": { "type": "string", "description": "ID of the scenario" },
+        "phaseId": { "type": "string", "description": "ID of the active phase" },
+        "timerId": { "type": "string", "description": "ID of the specific timer" },
+        "remainingSeconds": { "type": "number", "description": "Remaining time in seconds" },
+        "isRunning": { "type": "boolean", "description": "Whether the timer is running" },
+        "label": { "type": "string", "description": "Label of the timer" },
+        "activeImageId": { "type": "string", "description": "ID of the currently active image", "nullable": true },
+        "activeImageUrl": { "type": "string", "description": "URL of the currently active image", "nullable": true },
+        "activeResourceType": { "type": "string", "description": "Type of active resource (image or pdf)", "nullable": true },
+        "pdfPage": { "type": "number", "description": "Current page if active resource is a PDF", "nullable": true },
+        "lastUpdated": { "type": "string", "format": "date-time", "description": "ISO timestamp of last update" },
+        "updatedBy": { "type": "string", "description": "UID of the user who last updated" }
+      },
+      "required": ["scenarioId", "phaseId", "timerId", "remainingSeconds", "isRunning", "lastUpdated"]
+    },
+    "Performance": {
+      "title": "Performance",
+      "description": "Historical record of a scenario performance",
+      "type": "object",
+      "properties": {
+        "scenarioId": { "type": "string" },
+        "scenarioTitle": { "type": "string" },
+        "date": { "type": "string" },
+        "venue": { "type": "string" },
+        "cast": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "characterId": { "type": "string" },
+              "characterName": { "type": "string" },
+              "playerName": { "type": "string" }
+            }
+          }
+        },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["scenarioId", "scenarioTitle", "date", "venue", "cast", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/timerSessions/{userId}/sessions/{sessionId}": {
+      "schema": "TimerSession",
+      "description": "Active timer sessions for real-time sync (Public Read for easy sharing)"
+    },
+    "/users/{userId}/performances/{performanceId}": {
+      "schema": "Performance",
+      "description": "User's historical performance records"
+    },
+    "/handouts/{userId}/characters/{handoutId}": {
+      "schema": {
+        "title": "IndividualHandout",
+        "description": "Messages sent to individual players",
+        "type": "object",
+        "properties": {
+          "characterId": { "type": "string" },
+          "characterName": { "type": "string" },
+          "characterRole": { "type": "string" },
+          "characterColor": { "type": "string" },
+          "message": { "type": "string" },
+          "scenarioTitle": { "type": "string" },
+          "lastUpdated": { "type": "string", "format": "date-time" }
+        },
+        "required": ["characterId", "characterName", "message"]
+      },
+      "description": "Real-time messages for players (Public Read, Owner Write/Update)"
+    }
+  }
+}

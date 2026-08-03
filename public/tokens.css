@@ -1,0 +1,39 @@
+:root {
+  --font-display: 'Cinzel', serif;
+  --font-body: 'Noto Sans JP', 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  
+  --color-cobalt: #38bdf8;
+  --color-cobalt-soft: rgba(56, 189, 248, 0.12);
+  --color-amber: #fbbf24;
+}
+
+[data-theme="dark"], html {
+  --color-paper: #060a10;
+  --color-paper-deep: #090e17;
+  --color-paper-light: #111827;
+  --color-card-bg: #111827;
+  --color-card-border: rgba(255, 255, 255, 0.12);
+  --color-ink: #f8fafc;
+  --color-ink-soft: #cbd5e1;
+  --color-muted: #94a3b8;
+  --color-line: rgba(255, 255, 255, 0.12);
+  --color-accent: #38bdf8;
+  --color-accent-bg: rgba(56, 189, 248, 0.12);
+  --color-code-bg: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="light"] {
+  --color-paper: #ffffff;
+  --color-paper-deep: #f8fafc;
+  --color-paper-light: #ffffff;
+  --color-card-bg: #ffffff;
+  --color-card-border: #cbd5e1;
+  --color-ink: #0f172a;
+  --color-ink-soft: #334155;
+  --color-muted: #64748b;
+  --color-line: #cbd5e1;
+  --color-accent: #0284c7;
+  --color-accent-bg: rgba(2, 132, 199, 0.1);
+  --color-code-bg: #e2e8f0;
+}

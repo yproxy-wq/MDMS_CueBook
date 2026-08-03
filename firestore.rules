@@ -1,0 +1,135 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===================================
+    // Auth Helpers
+    // ===================================
+    function isAuthenticated() { return request.auth != null; }
+    function isAdmin() {
+      return isAuthenticated() && (
+        (request.auth.token.email == "yproxy@gmail.com" && request.auth.token.email_verified == true) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    // ===================================
+    // Validation Helpers
+    // ===================================
+    function incoming() { return request.resource.data; }
+
+    function isSecureShareId(value) {
+      return value is string && value.matches('^[a-f0-9]{64}$');
+    }
+
+    function hasExpectedShareId(data, shareId) {
+      return isSecureShareId(shareId) &&
+             ('shareId' in data) &&
+             data.shareId == shareId;
+    }
+
+    function isValidTimerSession(data, sessionId) {
+      // Basic type and size checks. Relaxed limits for better compatibility.
+      return hasExpectedShareId(data, sessionId) &&
+             !('pinCode' in data) &&
+             (!('scenarioId' in data) || (data.scenarioId is string && data.scenarioId.size() < 256)) &&
+             (!('phaseId' in data) || (data.phaseId is string && data.phaseId.size() < 256)) &&
+             (!('timerId' in data) || (data.timerId is string && data.timerId.size() < 256)) &&
+             (!('remainingSeconds' in data) || (data.remainingSeconds is number)) &&
+             (!('isRunning' in data) || (data.isRunning is bool)) &&
+             (!('lastUpdated' in data) || (data.lastUpdated is timestamp)) &&
+             (!('label' in data) || (data.label == null || (data.label is string && data.label.size() < 512))) &&
+             (!('activeImageId' in data) || (data.activeImageId == null || (data.activeImageId is string && data.activeImageId.size() < 256))) &&
+             (!('activeImageUrl' in data) || (data.activeImageUrl == null || (data.activeImageUrl is string && data.activeImageUrl.size() < 1200000))) &&
+             (!('activeImageName' in data) || (data.activeImageName == null || (data.activeImageName is string && data.activeImageName.size() < 512))) &&
+             (!('activeResourceType' in data) || (data.activeResourceType == null || data.activeResourceType in ['image', 'pdf', 'video'])) &&
+             (!('pdfPage' in data) || (data.pdfPage == null || data.pdfPage is number)) &&
+             (!('startTime' in data) || (data.startTime == null || data.startTime is number)) &&
+             (!('syncTimerEnabled' in data) || data.syncTimerEnabled is bool) &&
+             (!('syncContentEnabled' in data) || data.syncContentEnabled is bool) &&
+             (!('timerSize' in data) || (data.timerSize == null || data.timerSize in ['small', 'medium', 'large', 'mini'])) &&
+             (!('timerPosition' in data) || (data.timerPosition == null || data.timerPosition in ['top', 'bottom', 'floating'])) &&
+             (!('imageFit' in data) || (data.imageFit == null || data.imageFit in ['contain', 'cover', 'width', 'height', 'fill'])) &&
+             (!('timerForceHidden' in data) || data.timerForceHidden is bool) &&
+             (!('videoPlaying' in data) || data.videoPlaying is bool) &&
+             (!('videoProgress' in data) || data.videoProgress is number) &&
+             (!('videoDuration' in data) || data.videoDuration is number) &&
+             (!('videoVolume' in data) || data.videoVolume is number) &&
+             (!('videoLoop' in data) || data.videoLoop is bool);
+    }
+
+    // ===================================
+    // Main Match Rules
+    // ===================================
+    match /timerSessions/{userId}/sessions/{sessionId} {
+      // A 256-bit opaque ID is the viewer capability.  Legacy predictable IDs are
+      // deliberately denied, even when an old document remains in Firestore.
+      // The owner must be able to subscribe before the first timer document is
+      // created. Public viewers remain restricted to an existing capability doc.
+      allow get: if isSecureShareId(sessionId) &&
+                    ((isAuthenticated() && request.auth.uid == userId) || isAdmin() ||
+                     (resource != null && ('shareId' in resource.data) && resource.data.shareId == sessionId));
+      allow list: if false;
+      allow create, update: if (isAuthenticated() && request.auth.uid == userId || isAdmin()) &&
+                              isValidTimerSession(incoming(), sessionId);
+      allow delete: if (isAuthenticated() && request.auth.uid == userId || isAdmin()) &&
+                       isSecureShareId(sessionId) &&
+                       ('shareId' in resource.data) && resource.data.shareId == sessionId;
+
+      match /private/gm {
+        allow read, write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      }
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId}/performances/{performanceId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow create: if isAuthenticated() && request.auth.uid == userId && isValidPerformance(incoming());
+      allow delete: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow update: if false; 
+    }
+
+    match /handouts/{userId}/characters/{handoutId} {
+      // Owners may initialize a handout before it exists; public access still
+      // requires an existing matching capability document.
+      allow get: if isSecureShareId(handoutId) &&
+                    ((isAuthenticated() && request.auth.uid == userId) || isAdmin() ||
+                     (resource != null && ('shareId' in resource.data) && resource.data.shareId == handoutId));
+      allow list: if false;
+      allow create: if (isAuthenticated() && request.auth.uid == userId || isAdmin()) &&
+                       isValidHandout(incoming(), handoutId);
+      allow delete: if (isAuthenticated() && request.auth.uid == userId || isAdmin()) &&
+                       isSecureShareId(handoutId) &&
+                       ('shareId' in resource.data) && resource.data.shareId == handoutId;
+      allow update: if ((isAuthenticated() && request.auth.uid == userId || isAdmin()) &&
+                        isValidHandout(incoming(), handoutId)) ||
+                      (isSecureShareId(handoutId) &&
+                       ('shareId' in resource.data) && resource.data.shareId == handoutId &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['playerPresentAt']) &&
+                       request.resource.data.playerPresentAt is timestamp);
+
+      match /private/{docId} {
+        allow read, write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      }
+    }
+
+    function isValidHandout(data, handoutId) {
+      return hasExpectedShareId(data, handoutId) &&
+             (!('characterId' in data) || (data.characterId is string && data.characterId.size() < 128)) &&
+             (!('characterName' in data) || (data.characterName is string && data.characterName.size() < 256)) &&
+             (!('message' in data) || (data.message is string && data.message.size() < 2000)) &&
+             (!('messages' in data) || (data.messages is list && data.messages.size() <= 100)) &&
+             (!('scenarioTitle' in data) || (data.scenarioTitle is string && data.scenarioTitle.size() < 256)) &&
+             (!('playerPresentAt' in data) || data.playerPresentAt is timestamp);
+    }
+
+    function isValidPerformance(data) {
+      return (!('scenarioId' in data) || (data.scenarioId is string && data.scenarioId.size() < 128)) &&
+             (!('date' in data) || (data.date is string && data.date.size() < 64)) &&
+             (!('timestamp' in data) || data.timestamp is number);
+    }
+  }
+}

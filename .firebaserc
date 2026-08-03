@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "default": "cuebook-dev",
+    "development": "cuebook-dev",
+    "stable": "cuebook-stable",
+    "business": "cuebook-biz"
+  }
+}
