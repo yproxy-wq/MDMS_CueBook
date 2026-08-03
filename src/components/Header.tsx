@@ -325,7 +325,7 @@ const Header: React.FC<HeaderProps> = React.memo(({
                     <img
                       src={xtvBrandMark}
                       alt="XTV"
-                      className="relative z-0 -ml-[11px] h-6 w-6 shrink-0 object-contain pointer-events-none md:h-8 md:w-8"
+                      className="relative z-0 -ml-px h-6 w-6 shrink-0 object-contain pointer-events-none md:h-8 md:w-8"
                     />
                   )}
                 </h1>
