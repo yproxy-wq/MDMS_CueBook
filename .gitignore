@@ -14,7 +14,8 @@ dist-ssr
 .firebase/
 .env*
 !.env.example
-firebase-applet-config.json
+# Firebase Web SDK fallback configuration (contains public client identifiers only).
+!firebase-applet-config.json
 ai-coding-ops-kit/
 migrated_prompt_history/
 fix_dropdown.py

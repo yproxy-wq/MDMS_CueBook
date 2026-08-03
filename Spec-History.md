@@ -8,6 +8,10 @@
 
 ## 変更履歴一覧 (Change History)
 
+### [2026-08-03] CIのFirebase設定ファイル解決エラー修正
+- **TypeScript／Vite検証**: `src/lib/firebase.ts` の静的フォールバック設定をCIでも解決できるよう、公開Web SDK設定のみを含む `firebase-applet-config.json` を管理対象に戻した。
+- **運用**: 本番・Devのビルドは引き続き `VITE_FIREBASE_*` 環境変数を優先する。サービスアカウント鍵、OIDC情報などの秘密情報はファイルへ追加しない。
+
 ### [2026-08-03] Dev用GitHub Actions配備Workflow
 - **自動検証・配備 (`.github/workflows/deploy-dev.yml`)**:
   - `main`へのPushまたは手動実行をトリガーに、依存関係インストール、`npm run verify`、開発モードBuild、`cuebook-dev` Hosting配備を実行。
