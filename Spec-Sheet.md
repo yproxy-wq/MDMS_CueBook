@@ -94,7 +94,7 @@
    - `firebase.json` は `dist` を配備し、存在しない任意パスを `/index.html` へ rewrite する SPA 構成。
    - rewrite 前の URL を対象に、アプリシェルは再検証、`/assets/**` はハッシュ付き静的 asset として長期 immutable cache を適用する。
    - `.firebaserc` は AI Studio で使用する Firebase project を default alias として定義する。
-   - project aliases は `development` (`cuebook-dev`)、`stable` (`cuebook-stable`)、`business` (`cuebook-biz`) を使用し、default は `development` とする。
+   - project aliases は `development` (`cuebook-dev`) と `stable` (`cuebook-stable`) を使用し、default は `development` とする。Bizは店舗ごとに独立した `cuebook-biz-<店舗コード>` プロジェクトを使用し、Workflowの許可リストで配備先を固定する。
    - `npm run build:development` は `.env.development` のFirebase Web設定を使用し、Hostingの `cuebook-dev` と認証・Firestore接続先を一致させる。
 2. **配備前品質ゲート**:
    - `npm run verify` は lint、TypeScript 型検査、ユニットテスト、本番 build を順に実行する。
@@ -102,15 +102,27 @@
 3. **環境別リリース運用規定**:
    - **Dev (`cuebook-dev`)**: 新機能・修正を頻繁に追加し、開発者および協力者が検証するテスト環境。安定性を保証する一般公開先として扱わない。
    - **Stable (`cuebook-stable`)**: Devで品質ゲートと受入確認を完了した安定版だけを配備する一般公開環境。DevからStableへの昇格は、リリース対象の版を固定して実施する。
-   - **Biz (`cuebook-biz`)**: 特定利用者および店舗運用を想定した商用環境。Stableで互換性と安定動作を検証し、対象利用者にもStable版で事前確認を依頼した後に更新する。
+   - **Biz (`cuebook-biz-<店舗コード>`)**: 特定利用者および店舗運用を想定した商用環境。店舗ごとにFirebase project、Firestore、Authentication、Hosting、クォータおよびOIDCサービスアカウントを分離する。例としてXTV店舗は `cuebook-biz-xtv` を使用する。Stableで互換性と安定動作を検証し、対象利用者にもStable版で事前確認を依頼した後に更新する。
    - 緊急修正を除き、Bizの更新予定は少なくとも1か月前までに対象利用者へ連絡する。変更内容、確認対象、予定日および影響範囲を案内に含める。
    - 標準の昇格順序は **Dev → Stable → Biz** とし、Bizへの直接配備は行わない。緊急時に例外対応する場合は、理由、影響範囲、検証結果、ロールバック方法を `Spec-History.md` に記録する。
-   - StableおよびBizの本番配備は自動昇格させず、品質ゲート成功後の明示的な手動承認を必須とする。
+   - StableおよびBizの本番配備は自動昇格させず、品質ゲート成功後の明示的な手動承認を必須とする。配備元はDevで受入確認済みのGitタグに固定し、同じタグだけをStable、Bizへ昇格させる。
 4. **GitHub Actions Dev配備 (`.github/workflows/deploy-dev.yml`)**:
    - `main`へのPushまたはActionsの手動実行で、`npm run verify`、`npm run build:development`、Firebase Hosting (`cuebook-dev`) 配備を順番に実行する。
    - GitHub Environment `development` のVariablesにFirebase Web設定、Secretsに`GCP_WIF_PROVIDER`と`FIREBASE_DEPLOYER_SERVICE_ACCOUNT`を登録する。
    - Google Cloud認証はGitHub OIDC／Workload Identity Federationを使用し、長期Firebaseトークンをリポジトリへ保存しない。
    - Stable／Bizの配備Workflowは別途作成し、Dev Workflowから自動昇格させない。
+5. **GitHub Actions Stable配備 (`.github/workflows/deploy-stable.yml`)**:
+   - `workflow_dispatch` のみで実行し、Dev受入確認済みのバージョンGitタグを必須入力にする。GitHub Environment `stable` の承認後、`cuebook-stable` へ配備する。
+   - `stable` Environmentには、そのFirebase project専用の `VITE_FIREBASE_*` VariablesとOIDC用 `GCP_WIF_PROVIDER`／`FIREBASE_DEPLOYER_SERVICE_ACCOUNT` Secretsを登録する。
+6. **GitHub Actions Biz配備 (`.github/workflows/deploy-biz.yml`)**:
+   - `workflow_dispatch` のみで実行し、Stable受入確認済みのGitタグと、許可済みの店舗コードを必須入力にする。現在の許可コードは `xtv` で、配備先は `cuebook-biz-xtv` に固定される。
+   - GitHub Environmentは `biz-<店舗コード>`（例: `biz-xtv`）とし、店舗ごとのFirebase Variables、OIDC Secrets、Required reviewersを個別に管理する。任意文字列をHosting projectへ渡さない。
+   - 新店舗は、Firebase project作成、IAM Service Account Credentials API有効化、最小権限OIDCサービスアカウント設定、GitHub Environment作成、Workflow許可リスト追加、受入確認の順でオンボーディングする。
+7. **配備時の学びと再発防止**:
+   - CIで静的importされる設定ファイルは、実行時環境変数の有無にかかわらず型検査時に解決可能でなければならない。Firebase Web SDKの公開設定と、サービスアカウント等の秘密情報を混同しない。
+   - OIDC配備先ではIAM Service Account Credentials APIを有効化し、Firebase CLIへ短期アクセストークンを明示的に渡す。長期Firebaseトークンは使わない。
+   - Dev受入確認には実ブラウザでの認証、Firestore同期、深いURL、同期ウィンドウ、タイマー、主要ショートカットおよびタブレット幅の視覚確認を含める。CSSは子要素だけでなく、背景を覆う祖先レイヤーとz-indexを確認する。
+   - ロールバックは前回の受入確認済みGitタグを、同じStableまたは店舗Biz Workflowから明示的に再配備して行う。Bizの緊急変更は理由・影響範囲・検証結果・ロールバックタグを履歴へ記録する。
 
 ### F. データ整合性・設計原則 (v1.10)
 1. **ACID 境界**:

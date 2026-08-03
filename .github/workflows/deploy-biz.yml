@@ -1,0 +1,119 @@
+name: Deploy Biz Tenant to Firebase Hosting
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Stableで受入確認済みのGitタグ（例: v0.97s）'
+        required: true
+        type: string
+      tenant_code:
+        description: '配備先の店舗コード'
+        required: true
+        type: choice
+        options:
+          - xtv
+
+concurrency:
+  group: firebase-biz-${{ inputs.tenant_code }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify-and-deploy:
+    name: Verify and deploy cuebook-biz-${{ inputs.tenant_code }}
+    runs-on: ubuntu-latest
+    environment: biz-${{ inputs.tenant_code }}
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      TENANT_CODE: ${{ inputs.tenant_code }}
+
+    steps:
+      - name: Validate approved tenant and release tag
+        shell: bash
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+([a-zA-Z0-9.-]+)?$ ]]; then
+            echo "::error::release_tag must be a version tag such as v0.97s"
+            exit 1
+          fi
+          case "$TENANT_CODE" in
+            xtv) ;;
+            *)
+              echo "::error::Tenant is not approved for deployment"
+              exit 1
+              ;;
+          esac
+
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create tenant Firebase environment
+        shell: bash
+        env:
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_MEASUREMENT_ID: ${{ vars.VITE_FIREBASE_MEASUREMENT_ID }}
+        run: |
+          required=(VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID)
+          for name in "${required[@]}"; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::GitHub Environment variable $name is not configured"
+              exit 1
+            fi
+          done
+          cat > .env.biz <<EOF
+          VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY
+          VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN
+          VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID
+          VITE_FIREBASE_STORAGE_BUCKET=$VITE_FIREBASE_STORAGE_BUCKET
+          VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID
+          VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
+          VITE_FIREBASE_MEASUREMENT_ID=$VITE_FIREBASE_MEASUREMENT_ID
+          EOF
+
+      - name: Verify
+        run: npm run verify
+
+      - name: Build tenant bundle
+        run: npm run build:biz
+
+      - name: Authenticate to Google Cloud
+        id: google-auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.FIREBASE_DEPLOYER_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+          export_environment_variables: true
+
+      - name: Deploy Firebase Hosting
+        shell: bash
+        run: |
+          firebase_token="$(gcloud auth print-access-token)"
+          if [[ -z "$firebase_token" ]]; then
+            echo "::error::Unable to obtain an access token for Firebase Hosting"
+            exit 1
+          fi
+          case "$TENANT_CODE" in
+            xtv) firebase_project="cuebook-biz-xtv" ;;
+            *) exit 1 ;;
+          esac
+          npx firebase-tools deploy --only hosting --project "$firebase_project" --non-interactive --token "$firebase_token"

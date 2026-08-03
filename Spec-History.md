@@ -8,6 +8,11 @@
 
 ## 変更履歴一覧 (Change History)
 
+### [2026-08-03] Stable／店舗別Bizの手動昇格Workflow
+- **Stable (`deploy-stable.yml`)**: Dev受入確認済みのバージョンGitタグを指定してのみ実行できる、`cuebook-stable` 向けの手動配備Workflowを追加。GitHub Environment `stable` の承認と環境別Firebase設定を必須化した。
+- **Biz (`deploy-biz.yml`)**: Gitタグと許可済み店舗コードを指定してのみ実行できる、店舗別手動配備Workflowを追加。初期許可店舗 `xtv` は `cuebook-biz-xtv` と `biz-xtv` Environmentへ固定し、任意のHosting projectへの誤配備を防止する。
+- **再発防止**: Bizは店舗ごとにFirebaseプロジェクト、OIDC認証、GitHub Environmentを分離する。全環境で短期OIDCトークンを使用し、IAM Service Account Credentials APIの有効化、実ブラウザによる受入確認、タグ指定ロールバックを運用要件とした。
+
 ### [2026-08-03] v0.97s - タブレット台本の背景透過修正
 - **2カラムレイアウト (`App.tsx`)**: 台本コンテナに加え、その親で背景画像を覆っていた不透明なタブレット用レイアウト背景を透明化。PC中央パネルと同じ半透明暗色レイヤーと `backdrop-blur` の合成比に揃え、背景画像の控えめな透けと台本文字の視認性を両立した。モバイルの不透明背景は維持する。
 
