@@ -98,4 +98,4 @@ jobs:
             echo "::error::Unable to obtain an access token for Firebase Hosting"
             exit 1
           fi
-          npx firebase-tools deploy --only hosting --project cuebook-stable --non-interactive --token "$firebase_token"
+          npx firebase-tools deploy --only hosting,firestore:rules --project cuebook-stable --non-interactive --token "$firebase_token"

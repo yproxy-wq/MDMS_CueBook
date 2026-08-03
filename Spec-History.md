@@ -8,6 +8,10 @@
 
 ## 変更履歴一覧 (Change History)
 
+### [2026-08-03] Firestore Rulesを含む環境配備
+- **Dev／Stable／Biz Workflow**: Firebase Hostingだけでなく、同じリリースの `firestore.rules` を対象プロジェクトへ同時配備するよう変更。新規環境でHostingだけが更新され、Firestoreが既定拒否のまま残る事故を防止する。
+- **IAM要件**: 環境ごとの配備サービスアカウントには `Firebase Hosting Admin` に加えて `Firebase Rules Admin` を付与する。
+
 ### [2026-08-03] Codex経由の配備確認プロトコル
 - **操作窓口**: `gh` CLIのworkflow権限を確認し、Dev／Stable／Bizの配備WorkflowをCodexから起動・監視できることを確認した。
 - **安全策**: Devは明示的な配備指示で実行可能とし、Stable／Bizは対象タグ、Firebase project、店舗コード、受入確認、ロールバックタグを提示したチャット上の最終承認後にだけWorkflowを起動する。GitHub EnvironmentのRequired reviewerは独立して維持する。

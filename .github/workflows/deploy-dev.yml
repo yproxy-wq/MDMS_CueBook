@@ -93,7 +93,7 @@ jobs:
             exit 1
           fi
           npx firebase-tools deploy \
-            --only hosting \
+            --only hosting,firestore:rules \
             --project cuebook-dev \
             --non-interactive \
             --token "$firebase_token"

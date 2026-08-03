@@ -116,4 +116,4 @@ jobs:
             xtv) firebase_project="cuebook-biz-xtv" ;;
             *) exit 1 ;;
           esac
-          npx firebase-tools deploy --only hosting --project "$firebase_project" --non-interactive --token "$firebase_token"
+          npx firebase-tools deploy --only hosting,firestore:rules --project "$firebase_project" --non-interactive --token "$firebase_token"

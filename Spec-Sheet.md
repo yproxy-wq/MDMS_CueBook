@@ -96,6 +96,7 @@
    - `.firebaserc` は AI Studio で使用する Firebase project を default alias として定義する。
    - project aliases は `development` (`cuebook-dev`) と `stable` (`cuebook-stable`) を使用し、default は `development` とする。Bizは店舗ごとに独立した `cuebook-biz-<店舗コード>` プロジェクトを使用し、Workflowの許可リストで配備先を固定する。
    - `npm run build:development` は `.env.development` のFirebase Web設定を使用し、Hostingの `cuebook-dev` と認証・Firestore接続先を一致させる。
+   - Hosting配備では `firestore.rules` も同じFirebase projectへ同時配備する。アプリ本体だけを配備してSecurity Rulesを取り残さない。
 2. **配備前品質ゲート**:
    - `npm run verify` は lint、TypeScript 型検査、ユニットテスト、本番 build を順に実行する。
    - 初回および変更配備では Hosting preview channel に対して deep link、認証、同期画面、タイマー、キャッシュ更新を受入確認する。
@@ -113,10 +114,10 @@
    - Stable／Bizの配備Workflowは別途作成し、Dev Workflowから自動昇格させない。
 5. **GitHub Actions Stable配備 (`.github/workflows/deploy-stable.yml`)**:
    - `workflow_dispatch` のみで実行し、Dev受入確認済みのバージョンGitタグを必須入力にする。GitHub Environment `stable` の承認後、`cuebook-stable` へ配備する。
-   - `stable` Environmentには、そのFirebase project専用の `VITE_FIREBASE_*` VariablesとOIDC用 `GCP_WIF_PROVIDER`／`FIREBASE_DEPLOYER_SERVICE_ACCOUNT` Secretsを登録する。
+   - `stable` Environmentには、そのFirebase project専用の `VITE_FIREBASE_*` VariablesとOIDC用 `GCP_WIF_PROVIDER`／`FIREBASE_DEPLOYER_SERVICE_ACCOUNT` Secretsを登録する。配備サービスアカウントには `Firebase Hosting Admin` と `Firebase Rules Admin` を付与する。
 6. **GitHub Actions Biz配備 (`.github/workflows/deploy-biz.yml`)**:
    - `workflow_dispatch` のみで実行し、Stable受入確認済みのGitタグと、許可済みの店舗コードを必須入力にする。現在の許可コードは `xtv` で、配備先は `cuebook-biz-xtv` に固定される。
-   - GitHub Environmentは `biz-<店舗コード>`（例: `biz-xtv`）とし、店舗ごとのFirebase Variables、OIDC Secrets、Required reviewersを個別に管理する。任意文字列をHosting projectへ渡さない。
+   - GitHub Environmentは `biz-<店舗コード>`（例: `biz-xtv`）とし、店舗ごとのFirebase Variables、OIDC Secrets、Required reviewersを個別に管理する。配備サービスアカウントには `Firebase Hosting Admin` と `Firebase Rules Admin` を付与し、任意文字列をHosting projectへ渡さない。
    - 新店舗は、Firebase project作成、IAM Service Account Credentials API有効化、最小権限OIDCサービスアカウント設定、GitHub Environment作成、Workflow許可リスト追加、受入確認の順でオンボーディングする。
 7. **配備時の学びと再発防止**:
    - CIで静的importされる設定ファイルは、実行時環境変数の有無にかかわらず型検査時に解決可能でなければならない。Firebase Web SDKの公開設定と、サービスアカウント等の秘密情報を混同しない。
