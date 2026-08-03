@@ -310,22 +310,22 @@ const Header: React.FC<HeaderProps> = React.memo(({
           >
             <div className="flex items-center gap-1 lg:gap-2 self-stretch relative">
               <div className="flex flex-col justify-center -space-y-1 md:-space-y-1.5 shrink-0">
-                <h1 className="text-[20px] md:text-[24px] font-cinzel font-black tracking-widest text-[#d8d8d8] flex items-center relative pl-2 md:pl-3">
+                <h1 className="text-[20px] md:text-[24px] font-cinzel font-black tracking-widest text-[#d8d8d8] flex items-center relative isolate pl-2 md:pl-3">
                   <img 
                     src="https://raw.githubusercontent.com/yproxy-wq/MDMS_CueBook/refs/heads/main/nib.png" 
                     alt="Nib" 
                     className="absolute -left-5 md:-left-8 -top-3.5 md:-top-6 w-14 h-14 md:w-20 md:h-20 object-contain opacity-75 mix-blend-screen pointer-events-none filter drop-shadow-[0_0_12px_rgba(254,240,138,0.8)] rotate-[10deg]"
                     referrerPolicy="no-referrer"
                   />
-                  <span style={{ color: '#d8d8d8', textShadow: `0 0 15px ${themeColor}, 0 0 8px rgba(254, 240, 138, 0.9), 0 0 3px rgba(255, 255, 255, 0.9)`, fontSize: '115%', display: 'inline-block', position: 'relative', zIndex: 1 }}>C</span>
-                  <span style={{ textShadow: '0 0 15px rgba(255, 255, 255, 0.8), 0 0 8px rgba(254, 240, 138, 0.6), 0 0 3px rgba(255, 255, 255, 0.8)' }}>ue</span>
-                  <span style={{ color: '#d8d8d8', textShadow: `0 0 15px ${themeColor}, 0 0 8px rgba(254, 240, 138, 0.9), 0 0 3px rgba(255, 255, 255, 0.9)`, fontSize: '115%', display: 'inline-block' }}>B</span>
-                  <span style={{ textShadow: '0 0 15px rgba(255, 255, 255, 0.8), 0 0 8px rgba(254, 240, 138, 0.6), 0 0 3px rgba(255, 255, 255, 0.8)' }}>ook</span>
+                  <span style={{ color: '#d8d8d8', textShadow: `0 0 15px ${themeColor}, 0 0 8px rgba(254, 240, 138, 0.9), 0 0 3px rgba(255, 255, 255, 0.9)`, fontSize: '115%', display: 'inline-block', position: 'relative', zIndex: 10 }}>C</span>
+                  <span style={{ textShadow: '0 0 15px rgba(255, 255, 255, 0.8), 0 0 8px rgba(254, 240, 138, 0.6), 0 0 3px rgba(255, 255, 255, 0.8)', position: 'relative', zIndex: 10 }}>ue</span>
+                  <span style={{ color: '#d8d8d8', textShadow: `0 0 15px ${themeColor}, 0 0 8px rgba(254, 240, 138, 0.9), 0 0 3px rgba(255, 255, 255, 0.9)`, fontSize: '115%', display: 'inline-block', position: 'relative', zIndex: 10 }}>B</span>
+                  <span style={{ textShadow: '0 0 15px rgba(255, 255, 255, 0.8), 0 0 8px rgba(254, 240, 138, 0.6), 0 0 3px rgba(255, 255, 255, 0.8)', position: 'relative', zIndex: 10 }}>ook</span>
                   {isXtvTenant && (
                     <img
                       src={xtvBrandMark}
                       alt="XTV"
-                      className="-ml-[6px] h-6 w-6 shrink-0 object-contain md:h-8 md:w-8"
+                      className="relative z-0 -ml-[11px] h-6 w-6 shrink-0 object-contain pointer-events-none md:h-8 md:w-8"
                     />
                   )}
                 </h1>
