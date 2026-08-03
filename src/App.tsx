@@ -2013,7 +2013,11 @@ function App() {
             </div>
           ) : layoutMode === '2-column' || layoutMode === '1-column' ? (
             /* --- EXPERIMENTAL LAYOUT B / TABLET VERTICAL / NEW MOBILE (Integrated Cockpit) --- */
-            <div className="w-full h-full flex flex-col relative overflow-hidden bg-[#060606]">
+            <div
+              className={`w-full h-full flex flex-col relative overflow-hidden ${
+                layoutMode === '2-column' ? 'bg-transparent' : 'bg-[#060606]'
+              }`}
+            >
               {/* Top Navigation: Render progress management bar at top ONLY inside tablet portrait mode */}
               {layoutMode === '2-column' && (
                 <div className="w-full h-16 bg-[#0a0a0b] border-b border-white/20 flex items-center justify-between px-3 md:px-5 shrink-0 z-50 select-none">
