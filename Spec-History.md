@@ -8,6 +8,15 @@
 
 ## 変更履歴一覧 (Change History)
 
+### [2026-08-03] v0.97s - ヘッダー調整と同期診断バーの廃止
+- **ヘッダーロゴ (`Header.tsx`)**: CueBookロゴをモバイル20px／デスクトップ24pxへ揃え、最終指定の淡いグレー（`#d8d8d8`）へ変更。
+- **常駐同期診断バー (`App.tsx`)**: 全ビュー下部の「同期がうまくいかないときは？」バーを削除。未到達になる通知導線も同時に除去し、同期エラーは既存の通知とSystem Recoveryで扱う。
+
+### [2026-08-03] v0.97s - Biz-Xtvヘッダーブランドマーク表示修正
+- **XTV専用ロゴ表示 (`Header.tsx`, `deploy-biz.yml`)**:
+  - 未使用だった `dot-x.png` をViteアセットとして取り込み、Biz-Xtvビルド時だけCueBookロゴ右側に表示するよう修正。
+  - Biz Workflowが許可済み店舗コードを `VITE_CUEBOOK_TENANT` としてビルドへ渡し、Dev／Stable版にブランドマークが混入しないようにした。
+
 ### [2026-08-03] Firestore Rulesを含む環境配備
 - **Dev／Stable／Biz Workflow**: Firebase Hostingだけでなく、同じリリースの `firestore.rules` を対象プロジェクトへ同時配備するよう変更。新規環境でHostingだけが更新され、Firestoreが既定拒否のまま残る事故を防止する。
 - **IAM要件**: 環境ごとの配備サービスアカウントには `Firebase Hosting Admin` に加えて `Firebase Rules Admin` を付与する。

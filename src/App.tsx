@@ -30,7 +30,6 @@ import { auth, signInWithGoogle, logout } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import TimerShareView from './components/TimerShareView';
 import { NetworkToast } from './components/NetworkToast';
-import { SyncTroubleshooter } from './components/SyncTroubleshooter';
 import { selectSyncMedia, transformDropboxUrl } from './utils/mediaHelper';
 import { createSecureShareId, createTimerSessionId, isSecureShareId } from './utils/syncHelper';
 import { buildAppWindowUrl, getAppWindowMode } from './utils/appRoute';
@@ -84,7 +83,6 @@ const CompactTimerReadout: React.FC<{
 function App() {
   const lastAutoSnapshotTimeRef = useRef<number>(0);
   const [isQuickActionsOpen, setIsQuickActionsOpen] = useState(false);
-  const [isSyncTroubleshooterOpen, setIsSyncTroubleshooterOpen] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isBTActive, setIsBTActive] = useState(false);
@@ -3022,17 +3020,6 @@ function App() {
         isEditorMode={state.isEditorMode}
       />
 
-      <SyncTroubleshooter
-        isOpen={isSyncTroubleshooterOpen}
-        onClose={() => setIsSyncTroubleshooterOpen(false)}
-        quotaExceeded={quotaExceeded}
-        isDirty={false}
-        timerEnabled={state.syncConfig?.timerEnabled ?? true}
-        contentEnabled={state.syncConfig?.contentEnabled ?? true}
-        activeImageId={state.activeImageId ?? null}
-        isGM={true}
-      />
-
       {showSessionSummary && (
         <PostSessionSummaryModal
           scenario={state.currentScenario}
@@ -3085,7 +3072,7 @@ function App() {
         )}
       </AnimatePresence>
       {/* Real-time Network Toast Banner */}
-      <NetworkToast onOpenTroubleshooter={() => setIsSyncTroubleshooterOpen(true)} />
+      <NetworkToast />
     </div>
   );
 }

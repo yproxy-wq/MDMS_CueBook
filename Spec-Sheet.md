@@ -79,10 +79,11 @@
    - `dispatchGlobalShortcut` は DOM 非依存の dispatcher として切り出し、同期ウィンドウ、音源、タイマーを含む重点操作をユニットテストで検証する。入力／textarea／select／contenteditable 中は発火しない。
 3. **ブランドロゴ装飾 (`Header.tsx`)**:
    - ヘッダー左上の「CueBook」ロゴの「C」の文字背後に万年筆ペン先画像 (`nib.png`) を配置。文字群全体を右にシフトし、ペン先画像をさらに20%拡大 (`w-14 h-14 md:w-20 md:h-20`) および「C」の文字分左へオフセット (`-left-5 md:-left-8`)、見出しに合わせた角度 (`rotate-[10deg]`) で配置してクラシックかつ洗練されたトーンを演出。
+   - Biz-Xtv ビルド（`VITE_CUEBOOK_TENANT=xtv`）では、ロゴ右側に `dot-x.png` のXTVブランドマークを表示する。Dev／Stableおよび他店舗テナントには表示しない。
 4. **GM向けクイックアクション (`QuickActionsModal.tsx`)**:
    - `Ctrl + Alt + Q` で起動可能なクイックアクションダイアログ。全音声即時停止、タイマーリセット、フェーズ検索、同期設定、各種設定へワンタップアクセス。
 5. **ネットワーク・同期シューター (`SyncTroubleshooter.tsx`, `NetworkToast.tsx`)**:
-   - Firestore クォータ・ネットワーク状態のリアルタイム診断と復旧UI。
+   - Firestore クォータ・ネットワーク状態は通知とSystem Recoveryで案内する。常時表示される「同期がうまくいかないときは？」診断バーは設けない。
 6. **利用者向けUpdate Log (v0.97s)**:
    - 表示用のリリース識別子は `src/config/version.ts` の `APP_VERSION` を正とし、ヘッダー、ヘルプ、初期ガイド、Update Logで v0.97s を一貫して表示する。
    - 表示内容はショートカットキーの追加・改善と細かなバグフィックスに限定し、v1.08 / v1.09 の技術履歴はアプリ内のUpdate Logに表示しない。
@@ -118,6 +119,7 @@
 6. **GitHub Actions Biz配備 (`.github/workflows/deploy-biz.yml`)**:
    - `workflow_dispatch` のみで実行し、Stable受入確認済みのGitタグと、許可済みの店舗コードを必須入力にする。現在の許可コードは `xtv` で、配備先は `cuebook-biz-xtv` に固定される。
    - GitHub Environmentは `biz-<店舗コード>`（例: `biz-xtv`）とし、店舗ごとのFirebase Variables、OIDC Secrets、Required reviewersを個別に管理する。配備サービスアカウントには `Firebase Hosting Admin` と `Firebase Rules Admin` を付与し、任意文字列をHosting projectへ渡さない。
+   - Bizビルドは `VITE_CUEBOOK_TENANT` に承認済みの店舗コードを埋め込み、店舗別ブランド表示をビルド時に限定する。
    - 新店舗は、Firebase project作成、IAM Service Account Credentials API有効化、最小権限OIDCサービスアカウント設定、GitHub Environment作成、Workflow許可リスト追加、受入確認の順でオンボーディングする。
 7. **配備時の学びと再発防止**:
    - CIで静的importされる設定ファイルは、実行時環境変数の有無にかかわらず型検査時に解決可能でなければならない。Firebase Web SDKの公開設定と、サービスアカウント等の秘密情報を混同しない。
