@@ -2104,7 +2104,7 @@ function App() {
               )}
 
               {/* 2. GRAND GM STUDY & SCRIPT VIEW (Fills the entire remaining screen) */}
-              <div className="flex-1 w-full bg-[#0c0c0c] relative overflow-hidden">
+              <div className="flex-1 w-full bg-black/30 backdrop-blur-md relative overflow-hidden">
                 {previewPhase && (
                   <ScriptViewer 
                     phase={previewPhase} 
