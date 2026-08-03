@@ -8,6 +8,10 @@
 
 ## 変更履歴一覧 (Change History)
 
+### [2026-08-03] Codex経由の配備確認プロトコル
+- **操作窓口**: `gh` CLIのworkflow権限を確認し、Dev／Stable／Bizの配備WorkflowをCodexから起動・監視できることを確認した。
+- **安全策**: Devは明示的な配備指示で実行可能とし、Stable／Bizは対象タグ、Firebase project、店舗コード、受入確認、ロールバックタグを提示したチャット上の最終承認後にだけWorkflowを起動する。GitHub EnvironmentのRequired reviewerは独立して維持する。
+
 ### [2026-08-03] Stable／店舗別Bizの手動昇格Workflow
 - **Stable (`deploy-stable.yml`)**: Dev受入確認済みのバージョンGitタグを指定してのみ実行できる、`cuebook-stable` 向けの手動配備Workflowを追加。GitHub Environment `stable` の承認と環境別Firebase設定を必須化した。
 - **Biz (`deploy-biz.yml`)**: Gitタグと許可済み店舗コードを指定してのみ実行できる、店舗別手動配備Workflowを追加。初期許可店舗 `xtv` は `cuebook-biz-xtv` と `biz-xtv` Environmentへ固定し、任意のHosting projectへの誤配備を防止する。

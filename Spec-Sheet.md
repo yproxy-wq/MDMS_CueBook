@@ -123,6 +123,12 @@
    - OIDC配備先ではIAM Service Account Credentials APIを有効化し、Firebase CLIへ短期アクセストークンを明示的に渡す。長期Firebaseトークンは使わない。
    - Dev受入確認には実ブラウザでの認証、Firestore同期、深いURL、同期ウィンドウ、タイマー、主要ショートカットおよびタブレット幅の視覚確認を含める。CSSは子要素だけでなく、背景を覆う祖先レイヤーとz-indexを確認する。
    - ロールバックは前回の受入確認済みGitタグを、同じStableまたは店舗Biz Workflowから明示的に再配備して行う。Bizの緊急変更は理由・影響範囲・検証結果・ロールバックタグを履歴へ記録する。
+8. **Codex経由の配備指示と確認プロトコル**:
+   - 開発者は「Devに配備して」と指示できる。Codexは作業ツリー、品質ゲート、対象commitを確認し、`main` へのPushとDev Workflowの完了確認を行う。
+   - 開発者は「Stableへ `<タグ>` を配備して」と指示できる。Codexはタグの存在、Dev受入確認、品質ゲート、配備先 `cuebook-stable` を確認したうえで、Workflow起動**直前**にタグ・対象project・ロールバックタグを示して明示承認を求める。承認後にだけタグPush／Workflow起動を行う。
+   - 開発者は「Biz `<店舗コード>` へ `<タグ>` を配備して」と指示できる。CodexはStable受入確認、許可済み店舗コード、予定通知、配備先 `cuebook-biz-<店舗コード>`、ロールバックタグを確認し、Workflow起動**直前**に明示承認を求める。承認後にだけ起動する。
+   - GitHub EnvironmentのRequired reviewerは、Codexのチャット承認とは独立した第二の防壁である。Workflow起動後はGitHub上の承認者がEnvironmentを承認するまでSecretsを取得できず、Codexはその承認を迂回しない。
+   - Codexは`gh` CLIでWorkflowを起動・監視できるが、別のGitHubユーザーによるRequired reviewer承認、Firebase project作成、Google Cloud IAM権限付与は代行せず、必要時に手順を案内する。
 
 ### F. データ整合性・設計原則 (v1.10)
 1. **ACID 境界**:
