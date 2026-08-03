@@ -9,8 +9,8 @@
 ## 変更履歴一覧 (Change History)
 
 ### [2026-08-03] Firebase Hosting配備時のOIDC認証引き継ぎ修正
-- **GitHub Actions (`.github/workflows/deploy-dev.yml`)**: Google Cloud OIDC認証で生成した一時認証ファイルを `GOOGLE_APPLICATION_CREDENTIALS` としてFirebase CLIへ明示的に引き継ぐよう変更。
-- **再発防止**: 認証アクションの成功だけでなく、後続CLIが同じ資格情報を参照できることを配備ステップで確認する。
+- **GitHub Actions (`.github/workflows/deploy-dev.yml`)**: Google Cloud OIDC認証後に短期アクセストークンを発行し、Firebase CLIの `--token` へ明示的に渡すよう変更。ADCだけではFirebase CLIが未ログイン扱いになるRunner環境に対応。
+- **再発防止**: 認証アクションの成功だけでなく、後続CLIが実際に利用できるアクセストークンを取得できることを配備ステップで検証する。
 
 ### [2026-08-03] CIのFirebase設定ファイル解決エラー修正
 - **TypeScript／Vite検証**: `src/lib/firebase.ts` の静的フォールバック設定をCIでも解決できるよう、公開Web SDK設定のみを含む `firebase-applet-config.json` を管理対象に戻した。

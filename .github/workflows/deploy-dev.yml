@@ -85,6 +85,15 @@ jobs:
           export_environment_variables: true
 
       - name: Deploy Firebase Hosting
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.google-auth.outputs.credentials_file_path }}
-        run: npx firebase-tools deploy --only hosting --project cuebook-dev --non-interactive
+        shell: bash
+        run: |
+          firebase_token="$(gcloud auth print-access-token)"
+          if [[ -z "$firebase_token" ]]; then
+            echo "::error::Unable to obtain an access token for Firebase Hosting"
+            exit 1
+          fi
+          npx firebase-tools deploy \
+            --only hosting \
+            --project cuebook-dev \
+            --non-interactive \
+            --token "$firebase_token"
