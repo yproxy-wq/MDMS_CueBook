@@ -8,6 +8,10 @@
 
 ## 変更履歴一覧 (Change History)
 
+### [2026-08-03] v0.97s - リリース表記統一
+- **アプリ内表示**: ヘッダー、ヘルプ、初期ガイド、Update Logの表示を `v0.97s` に統一した。
+- **内部定義**: `src/config/version.ts` の `APP_VERSION` を表示用の単一の正とし、`package.json` はツール互換のSemVer `0.97.0` を使用する。
+
 ### [2026-08-03] Firebase Hosting配備時のOIDC認証引き継ぎ修正
 - **GitHub Actions (`.github/workflows/deploy-dev.yml`)**: Google Cloud OIDC認証後に短期アクセストークンを発行し、Firebase CLIの `--token` へ明示的に渡すよう変更。ADCだけではFirebase CLIが未ログイン扱いになるRunner環境に対応。
 - **再発防止**: 認証アクションの成功だけでなく、後続CLIが実際に利用できるアクセストークンを取得できることを配備ステップで検証する。

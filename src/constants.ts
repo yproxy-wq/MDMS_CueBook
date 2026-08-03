@@ -1,4 +1,5 @@
 import { Scenario, SoundType, CharacterType } from './types';
+import { APP_VERSION } from './config/version';
 
 export const INITIAL_SCENARIO: Scenario = {
   id: 'cuebook-manual',
@@ -512,7 +513,7 @@ CueBookは、実際のオフラインセッションでの通信瞬断や誤っ�
     },
     {
       id: 't-08-updates',
-      name: '09. 更新情報 (v0.97)',
+      name: `09. 更新情報 (${APP_VERSION})`,
       description: 'ショートカット機能の追加と細かな安定化修正。',
       script: '',
       themeColor: '#a855f7',
@@ -521,9 +522,9 @@ CueBookは、実際のオフラインセッションでの通信瞬断や誤っ�
           id: 'b9-1',
           type: 'markdown',
           content: `
-# 09. 更新ログ (v0.97)
+# 09. 更新ログ (${APP_VERSION})
 
-CueBook v0.97 の更新内容です。進行中に頻繁に使うキーボード操作を追加し、周辺の細かな不具合を修正しました。
+CueBook ${APP_VERSION} の更新内容です。進行中に頻繁に使うキーボード操作を追加し、周辺の細かな不具合を修正しました。
 
 ## ショートカットキーの追加・改善
 

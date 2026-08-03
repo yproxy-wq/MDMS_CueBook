@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import { INITIAL_SCENARIO } from '../constants';
+import { APP_VERSION } from '../config/version';
 
 interface HelpModalProps {
   isOpen: boolean;
@@ -116,7 +117,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, themeColor }) =>
   if (!isOpen) return null;
 
   const tabs = [
-    { id: 'updates', label: '更新(v0.97)', icon: Sparkles },
+    { id: 'updates', label: `更新(${APP_VERSION})`, icon: Sparkles },
     { id: 'basic', label: '基本・台本', icon: BookOpen },
     { id: 'audio', label: '音響演出', icon: Music },
     { id: 'sync', label: '同期・リマインダー', icon: Users },
@@ -185,7 +186,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, themeColor }) =>
 
         {/* Footer */}
         <div className="p-4 border-t border-white/5 bg-black/80 flex items-center justify-between shrink-0">
-          <p className="text-[9px] font-cinzel text-white/20 tracking-widest uppercase font-black">The Mastermind Deck / CueBook System v0.97</p>
+          <p className="text-[9px] font-cinzel text-white/20 tracking-widest uppercase font-black">The Mastermind Deck / CueBook System {APP_VERSION}</p>
           <div className="flex items-center gap-4">
              <a href="/manual-a.html" target="_blank" rel="noopener noreferrer" className="text-[9px] font-bold text-sky-400/80 hover:text-sky-300 transition-colors uppercase font-cinzel tracking-tighter flex items-center gap-1">
                <BookOpen size={10} />

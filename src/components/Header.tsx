@@ -12,6 +12,7 @@ import { Phase, CustomShortcuts } from '../types';
 import TimePickerModal from './TimePickerModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { networkMonitor, NetworkState } from '../services/NetworkMonitor';
+import { APP_VERSION } from '../config/version';
 
 interface HeaderProps {
   title: string;
@@ -163,7 +164,7 @@ const Header: React.FC<HeaderProps> = React.memo(({
     }
   };
 
-  const currentVersion = 'v0.97';
+  const currentVersion = APP_VERSION;
 
   const handleVersionClick = (e: React.MouseEvent) => {
     e.stopPropagation();

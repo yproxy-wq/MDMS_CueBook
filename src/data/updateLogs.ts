@@ -1,6 +1,8 @@
 
+import { APP_VERSION } from '../config/version';
+
 export const UPDATE_LOGS = [
-  { date: '2026.08.03', version: 'v0.97', notes: [
+  { date: '2026.08.03', version: APP_VERSION, notes: [
     'ショートカット強化: Ctrl+Alt+W で Sync Studio、Ctrl+Alt+I と [ / ] で同期メディア、数字 1〜9 で指定メディアを操作できます。',
     '即時操作: Ctrl+Alt+B / S / R / N / P / Q と Space で、BGM・SE・タイマー・フェーズ・クイックアクションを素早く実行できます。',
     '誤操作防止: テキスト入力中はグローバルショートカットを無効化し、音源・タイマー・同期ウィンドウの操作判定を安定化しました。',
