@@ -1572,7 +1572,10 @@ function App() {
   const parseScenarioFile = async (file: File): Promise<Scenario> => {
     const fileName = String(file.name || '').toLowerCase();
     let content: string;
-    if (fileName.endsWith('.zip')) {
+    // `.cuebook` exports are ZIP containers too. Do not feed their binary
+    // `PK\x03\x04` header into JSON.parse (which produces "Unexpected token P").
+    const isArchive = fileName.endsWith('.zip') || fileName.endsWith('.cuebook') || file.type === 'application/zip';
+    if (isArchive) {
       const { default: JSZip } = await import('jszip');
       const zip = await JSZip.loadAsync(file);
       const jsonFile = Object.values(zip.files).find(item => String(item.name || '').toLowerCase().endsWith('.json'));
@@ -1748,30 +1751,12 @@ function App() {
       const target = e.target as HTMLInputElement;
       const file = target.files?.[0];
       if (!file) return;
-      const fileName = String(file.name || '');
+      const fileName = String(file.name || '').toLowerCase();
       try {
-        if (fileName.endsWith('.zip')) {
-          const { default: JSZip } = await import('jszip');
-          const zip = await JSZip.loadAsync(file);
-          const jsonFile = Object.values(zip.files).find((f) => String(f?.name || '').endsWith('.json'));
-          if (jsonFile) {
-            const content = await jsonFile.async('string');
-            handleUpdateScenario(JSON.parse(content));
-          }
-        } else if (fileName.endsWith('.json') || fileName.endsWith('.cuebook')) {
-          const reader = new FileReader();
-          reader.onload = (re) => {
-            if (re.target?.result) {
-              const data = JSON.parse(re.target.result as string);
-              // Basic validation
-              if (data && data.title && data.phases) {
-                handleUpdateScenario(data);
-              } else {
-                alert("Invalid scenario data.");
-              }
-            }
-          };
-          reader.readAsText(file);
+        if (fileName.endsWith('.json') || fileName.endsWith('.zip') || fileName.endsWith('.cuebook') || file.type === 'application/zip') {
+          const data = await parseScenarioFile(file);
+          if (data && data.title && data.phases) handleUpdateScenario(data);
+          else alert("Invalid scenario data.");
         }
       } catch (err) { 
         console.error("Import failed:", err);

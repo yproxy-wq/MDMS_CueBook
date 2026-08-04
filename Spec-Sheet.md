@@ -61,6 +61,8 @@
    - シナリオデータ変更時に右下にアニメーション付き "Changes Saved" インジケーターを自動表示（表示時間は9秒に統一）。
 4. **階層的台本進行 & ハンドアウト**:
    - フェーズ管理 (`ScriptViewer`)、アウトライン編集 (`OutlineEditor`)、キャラクター別資料配布 (`HandoutModal`)。
+5. **シナリオ入出力**:
+   - `.json`、`.zip`、`.cuebook`を受け付ける。`.cuebook`はZIPコンテナ内のシナリオJSONを展開して検証・読み込む。
 
 ### D. ユーザーインターフェース & アクセシビリティ
 1. **不透明ソリッドダークUI設計 (`Header.tsx`, `PhaseProgressNav.tsx`, `App.tsx`)**:
