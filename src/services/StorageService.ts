@@ -1,5 +1,5 @@
 
-import { Scenario } from '../types';
+import { Scenario, SyncConfig } from '../types';
 import { validateAndMigrateScenario } from '../utils/scenarioValidator';
 
 const DB_NAME = 'TheMastermindDeckDB';
@@ -14,6 +14,23 @@ export interface ScenarioBinding {
   fileFingerprint: string;
   boundAt: number;
   updatedAt: number;
+}
+
+export interface ScenarioSessionSnapshot {
+  scenarioId: string;
+  currentPhaseId: string;
+  previewPhaseId: string;
+  timerStates: Record<string, { seconds: number; isRunning: boolean; startTime?: number | null }>;
+  phaseResults: Record<string, number>;
+  phaseDurations: Record<string, number>;
+  activeImageId?: string | null;
+  gmActiveImageId?: string | null;
+  syncConfig?: SyncConfig;
+  sessionStartTime?: number;
+  phaseStartTime?: number;
+  exitTime?: string;
+  isPaused?: boolean;
+  savedAt: number;
 }
 
 class StorageService {
@@ -144,6 +161,25 @@ class StorageService {
 
   async deleteBinding(scenarioId: string): Promise<void> {
     await this.runTransaction(BINDING_STORE_NAME, 'readwrite', store => store.delete(scenarioId));
+  }
+
+  async saveSession(scenarioId: string, snapshot: ScenarioSessionSnapshot): Promise<void> {
+    const chainKey = `session:${scenarioId}`;
+    const previous = this.writeChains.get(chainKey) ?? Promise.resolve();
+    const write = previous
+      .catch(() => undefined)
+      .then(() => this.runTransaction('sessions', 'readwrite', store => store.put(snapshot, scenarioId)))
+      .then(() => undefined);
+    this.writeChains.set(chainKey, write);
+    try {
+      await write;
+    } finally {
+      if (this.writeChains.get(chainKey) === write) this.writeChains.delete(chainKey);
+    }
+  }
+
+  async loadSession(scenarioId: string): Promise<ScenarioSessionSnapshot | null> {
+    return this.runTransaction('sessions', 'readonly', store => store.get(scenarioId)).then(result => result || null);
   }
 
   migrateScenarioData(scen: Scenario): Scenario {

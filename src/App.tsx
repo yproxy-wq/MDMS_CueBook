@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom';
 import { INITIAL_SCENARIO, BLANK_SCENARIO } from './constants';
 import { audioService } from './services/AudioService';
-import { storageService } from './services/StorageService';
+import { storageService, ScenarioSessionSnapshot } from './services/StorageService';
 import { syncService, TimerSyncData } from './services/SyncService';
 import { sessionRecoveryService } from './services/sessionRecoveryService';
 import PhaseSidebar from './components/PhaseSidebar';
@@ -132,6 +132,8 @@ function App() {
   });
   const currentScenarioRef = useRef(state.currentScenario);
   currentScenarioRef.current = state.currentScenario;
+  const latestStateRef = useRef(state);
+  latestStateRef.current = state;
 
   const [activeTimerIndex, setActiveTimerIndex] = useState(0);
 
@@ -344,6 +346,7 @@ function App() {
   const [scenarioSwitching, setScenarioSwitching] = useState(false);
   const [pendingScenarioSwitch, setPendingScenarioSwitch] = useState<ScenarioRegistryEntry | null>(null);
   const initialScenarioResolutionRef = useRef(false);
+  const scenarioShortcutHandlerRef = useRef<(slot: number) => void>(() => undefined);
 
   const [migrationToast, setMigrationToast] = useState<{
     show: boolean;
@@ -994,6 +997,7 @@ function App() {
     canRedo: historyStatus.canRedo,
     onUndo: handleUndo,
     onRedo: handleRedo,
+    onSwitchScenarioSlot: slot => scenarioShortcutHandlerRef.current(slot),
   });
 
 
@@ -1509,6 +1513,24 @@ function App() {
   };
 
   const commitScenarioSwitch = useCallback(async (entry: ScenarioRegistryEntry, scenario: Scenario) => {
+    const current = latestStateRef.current;
+    const currentSession: ScenarioSessionSnapshot = {
+      scenarioId: current.currentScenario.id,
+      currentPhaseId: current.currentPhaseId,
+      previewPhaseId: current.previewPhaseId,
+      timerStates: current.timerStates,
+      phaseResults: current.phaseResults,
+      phaseDurations: current.phaseDurations,
+      activeImageId: current.activeImageId,
+      gmActiveImageId: current.gmActiveImageId,
+      syncConfig: current.syncConfig,
+      sessionStartTime: current.sessionStartTime,
+      phaseStartTime: current.phaseStartTime,
+      exitTime: current.exitTime,
+      isPaused: current.isPaused,
+      savedAt: Date.now(),
+    };
+    await storageService.saveSession(current.currentScenario.id, currentSession);
     await storageService.saveScenario(scenario.id, scenario);
     const nextPhaseId = scenario.phases?.[0]?.id || '';
     setState(previous => ({
@@ -1635,6 +1657,11 @@ function App() {
     }
     await performScenarioSelect(entry);
   }, [performScenarioSelect, state.currentScenario.id, state.phaseResults, state.phaseStartTime, state.timerStates]);
+
+  scenarioShortcutHandlerRef.current = (slot: number) => {
+    const entry = scenarioEntries[slot];
+    if (entry) void handleScenarioSelect(entry);
+  };
 
   const registerLocalScenarios = useCallback(async () => {
     if (!user) {
@@ -3367,7 +3394,7 @@ function App() {
               <div>
                 <h3 className="text-sm font-bold tracking-wider text-amber-300">シナリオを切り替えますか？</h3>
                 <p className="mt-3 text-xs leading-relaxed text-white/65">
-                  現在のシナリオの進行状況・タイマー状態は、この画面から破棄されます。<br />
+                  現在のシナリオの進行状況・タイマー状態を保存して切り替えます。<br />
                   <span className="font-mono text-white/85">{state.currentScenario.title}</span> → <span className="font-mono text-white/85">{pendingScenarioSwitch.title}</span>
                 </p>
               </div>

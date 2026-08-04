@@ -110,6 +110,15 @@ describe('dispatchGlobalShortcut', () => {
     expect(options.onTogglePhaseSearch).toHaveBeenCalledOnce();
   });
 
+  it('switches scenario slots with Ctrl/Cmd + Shift + number', () => {
+    const options = { ...callbacks(), onSwitchScenarioSlot: vi.fn() };
+    const handled = dispatchGlobalShortcut(makeEvent('3', { code: 'Digit3', ctrlKey: true, shiftKey: true }), options);
+
+    expect(handled).toBe(true);
+    expect(options.onSwitchScenarioSlot).toHaveBeenCalledWith(2);
+    expect(options.onControlVideo).not.toHaveBeenCalled();
+  });
+
   it('honors user-defined single-key bindings', () => {
     const options = callbacks();
     options.keyboardShortcuts = { bgmPlayPause: 'x', sePlay: 'c', timerStartPause: 't', syncImageNext: 'l', syncImagePrev: 'h', syncItemNext: 'l', syncItemPrev: 'h' };

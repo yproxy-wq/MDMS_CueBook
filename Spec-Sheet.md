@@ -93,6 +93,8 @@
    - IndexedDBの`scenarios`は端末内のシナリオ本体、`scenarioBindings`は端末ごとのファイル紐づけを保持する。未紐づけ、利用可能、更新版確認を明示する。
    - 同一`scenarioId`でfingerprintだけが変わったファイルは更新版として確認し、IDが異なるファイルは現在のシナリオを変更せず拒否する。
    - `/session?scenarioId=<id>` および `/edit?scenarioId=<id>` を直接開け、ブラウザの戻る／進むでも切り替える。未紐づけの場合はファイル選択へ誘導する。
+   - シナリオ管理は中央モーダルで一覧・登録・端末紐づけ・入出力・リセットを扱う。`Ctrl/Cmd + Shift + 1〜9` は一覧順のシナリオ切り替えに予約する。
+   - IndexedDB `sessions` は`scenarioId`をキーに、現在フェーズ、タイマー状態、フェーズ結果、同期表示状態を保存・復元する。シナリオ切り替え時は現在セッションを保存してから対象シナリオの進行を復元する。
 7. **レスポンシブ台本背景**:
    - PCの3カラムとタブレットの2カラムでは、台本領域を半透明の暗色レイヤーと軽い背景ぼかしで描画し、背景画像の雰囲気と台本の可読性を両立する。
 
@@ -185,7 +187,7 @@
 - `src/services/AudioService.ts`: Web Audio API シングルトン管理クラス
 - `src/services/SyncService.ts`: Firebase Firestore リアルタイム同期層
 - `src/services/ScenarioRegistryService.ts`: Googleアカウントのシナリオ台帳、設定同期、fingerprint、端末紐づけ境界
-- `src/services/StorageService.ts`: IndexedDBシナリオ本体、セッション、端末別`scenarioBindings`の永続化
+- `src/services/StorageService.ts`: IndexedDBシナリオ本体、`sessions`、端末別`scenarioBindings`の永続化
 - `src/hooks/useAppTimer.ts`: 既存タイマー互換の 1 秒表示フック
 - `src/hooks/useDisplayNow.ts` / `src/components/LiveHeader.tsx`: root state を更新せず leaf component と Header wrapper で表示時刻を更新する層
 - `src/index.css` / `vite.config.ts`: Tailwind CSS のビルド時生成とグローバルCSSエントリ

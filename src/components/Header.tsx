@@ -1,11 +1,12 @@
 
-import { Edit3, Play, Pause, Download, Upload, Volume2, RotateCcw, Heart, Info, HelpCircle, Menu, Settings, LogIn, LogOut, History, Maximize, Minimize, ChevronLeft, ChevronRight, Plus, Minus, Share, BookOpen, MessageSquare, Map, Activity, Keyboard } from 'lucide-react';
+import { Play, Pause, Volume2, RotateCcw, Heart, Info, HelpCircle, Menu, Settings, LogIn, LogOut, History, Maximize, Minimize, ChevronLeft, ChevronRight, Plus, Minus, Share, BookOpen, MessageSquare, Map, Activity, Keyboard } from 'lucide-react';
 import React, { useState, useRef, useEffect } from 'react';
 import HelpModal from './HelpModal';
 import UpdateLogModal from './modals/UpdateLogModal';
 import ScenarioMapModal from './modals/ScenarioMapModal';
 import AboutModal from './modals/AboutModal';
 import ShortcutsGuideModal from './modals/ShortcutsGuideModal';
+import ScenarioManagerModal from './modals/ScenarioManagerModal';
 import { UPDATE_LOGS } from '../data/updateLogs';
 import { User } from 'firebase/auth';
 import { Phase, CustomShortcuts } from '../types';
@@ -135,7 +136,7 @@ const Header: React.FC<HeaderProps> = React.memo(({
   const [showHelp, setShowHelp] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [showScenarioMenu, setShowScenarioMenu] = useState(false);
+  const [showScenarioManagerModal, setShowScenarioManagerModal] = useState(false);
   const [showUserSubMenu, setShowUserSubMenu] = useState(false);
   const [showExitTimePicker, setShowExitTimePicker] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -171,7 +172,6 @@ const Header: React.FC<HeaderProps> = React.memo(({
     const nextShow = !showMenu;
     setShowMenu(nextShow);
     if (!nextShow) {
-      setShowScenarioMenu(false);
       setShowUserSubMenu(false);
     }
   };
@@ -218,7 +218,6 @@ const Header: React.FC<HeaderProps> = React.memo(({
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         if (showMenu) {
           setShowMenu(false);
-          setShowScenarioMenu(false);
           setShowUserSubMenu(false);
         }
       }
@@ -805,141 +804,16 @@ const Header: React.FC<HeaderProps> = React.memo(({
                   </div>
                 </button>
 
-                {/* Scenario Item with sub-menu */}
-                <div className="relative border-b border-white/5 group/scen"
-                  onMouseEnter={() => setShowScenarioMenu(true)}
-                  onMouseLeave={() => setShowScenarioMenu(false)}
+                <button
+                  onClick={() => {
+                    setShowScenarioManagerModal(true);
+                    setShowMenu(false);
+                  }}
+                  className="w-full flex items-center justify-between border-b border-white/5 px-4 py-3 text-left text-white/60 transition-colors hover:bg-white/5 hover:text-emerald-300"
                 >
-                  <button 
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setShowScenarioMenu(!showScenarioMenu);
-                    }} 
-                    className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${showScenarioMenu ? 'bg-white/5 text-emerald-400' : 'text-white/60 hover:text-white hover:bg-white/5'}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <BookOpen size={16} />
-                      <span className="text-xs font-bold font-cinzel tracking-widest uppercase">シナリオ管理</span>
-                    </div>
-                    <div className="flex items-center">
-                      <div className={`w-1 h-1 rounded-full bg-emerald-500 mr-2 transition-opacity duration-300 ${showScenarioMenu ? 'opacity-100' : 'opacity-0'}`} />
-                      <ChevronLeft size={14} className={`text-white/20 transition-transform duration-300 ${showScenarioMenu ? 'translate-x-[-4px] text-emerald-400' : ''}`} />
-                    </div>
-                  </button>
-                  
-                  <AnimatePresence>
-                    {showScenarioMenu && (
-                      <motion.div 
-                        initial={{ opacity: 0, x: 20, scale: 0.95 }}
-                        animate={{ opacity: 1, x: 0, scale: 1 }}
-                        exit={{ opacity: 0, x: 20, scale: 0.95 }}
-                        className="absolute top-0 right-full mr-2 w-52 bg-[#0c0c0d]/95 border border-white/10 rounded-xl shadow-[0_25px_70px_rgba(0,0,0,0.9)] overflow-hidden z-[110] backdrop-blur-3xl"
-                      >
-                        <div className="px-4 py-3 bg-emerald-500/10 border-b border-white/10">
-                          <span className="text-[9px] font-bold font-cinzel text-emerald-400 tracking-[0.3em] uppercase">Scenario MGMT</span>
-                        </div>
-                        {scenarioEntries.length > 0 && (
-                          <div className="border-b border-white/10 px-2 py-2">
-                            <div className="px-2 pb-1 text-[8px] font-mono tracking-[0.18em] text-white/35 uppercase">MY SCENARIOS</div>
-                            <div className="max-h-48 overflow-y-auto space-y-0.5">
-                              {scenarioEntries.map(entry => {
-                                const isCurrent = entry.scenarioId === currentScenarioId || entry.title === scenarioName;
-                                const status = entry.availability === 'available' ? '●' : entry.availability === 'mismatch' ? '!' : entry.availability === 'syncing' ? '…' : '○';
-                                const statusClass = entry.availability === 'available' ? 'text-emerald-400' : entry.availability === 'mismatch' ? 'text-amber-400' : 'text-white/35';
-                                return (
-                                  <button
-                                    key={entry.scenarioId}
-                                    disabled={scenarioSwitching}
-                                    onClick={() => onScenarioSelect?.(entry)}
-                                    className={`w-full flex items-center gap-2 rounded-md px-2 py-2 text-left transition-colors ${isCurrent ? 'bg-emerald-400/10 text-emerald-200' : 'text-white/70 hover:bg-white/5 hover:text-white'} disabled:opacity-50`}
-                                    title={entry.availability === 'unbound' ? 'この端末のファイルを紐づけます' : entry.availability === 'mismatch' ? '更新版または別ファイルを確認します' : entry.title}
-                                  >
-                                    <span className={`font-mono text-[10px] ${statusClass}`}>{status}</span>
-                                    <span className="min-w-0 flex-1 truncate text-[10px] font-bold">{entry.title}</span>
-                                    <span className="shrink-0 text-[8px] font-mono text-white/30">{entry.availability === 'available' ? 'READY' : entry.availability === 'unbound' ? 'BIND' : entry.availability.toUpperCase()}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                            {onRegisterLocalScenarios && user && (
-                              <button
-                                onClick={onRegisterLocalScenarios}
-                                disabled={scenarioSwitching}
-                                className="mt-1 w-full rounded-md px-2 py-1.5 text-left text-[9px] font-mono text-sky-300/80 hover:bg-sky-400/10 hover:text-sky-200 disabled:opacity-50"
-                              >
-                                + この端末のシナリオを登録
-                              </button>
-                            )}
-                          </div>
-                        )}
-                        {scenarioSwitching && (
-                          <div className="px-4 py-2 text-[9px] font-mono text-amber-300 border-b border-white/5">SCENARIO SWITCHING…</div>
-                        )}
-                        {/* Play / Edit Session Toggle */}
-                        <button 
-                          onClick={() => {
-                            onToggleEditor();
-                            setShowScenarioMenu(false);
-                            setShowMenu(false);
-                          }}
-                          className="w-full flex items-center gap-3 px-4 py-3 transition-colors border-b border-white/5 text-left cursor-pointer hover:bg-white/5 text-sky-400 hover:text-sky-300"
-                        >
-                          <span className="inline-flex items-center shrink-0">
-                            {isEditorMode ? <Play size={14} fill="currentColor" /> : <Edit3 size={14} />}
-                          </span>
-                          <span className="text-[10px] font-bold font-cinzel tracking-wider uppercase">
-                            {isEditorMode ? '通常モード（SESSION）' : '編集ウィンドウ（EDIT）'}
-                          </span>
-                        </button>
-                        <button 
-                          onClick={() => { onImport(); setShowMenu(false); }} 
-                          className="w-full flex items-center gap-3 px-4 py-3 text-white/90 hover:text-white hover:bg-white/5 transition-colors border-b border-white/5 text-left cursor-pointer"
-                        >
-                          <Upload size={14} className="text-white/80" />
-                          <span className="text-[10px] font-bold font-cinzel tracking-wider uppercase">インポート</span>
-                        </button>
-                        
-                        <div className="border-b border-white/5">
-                          <button 
-                            onClick={() => { onExport('cuebook'); setShowMenu(false); }} 
-                            className="w-full flex items-center gap-3 px-4 py-3 text-white/90 hover:text-white hover:bg-white/5 transition-colors text-left cursor-pointer"
-                          >
-                            <Download size={14} className="text-white/80" />
-                            <span className="text-[10px] font-bold font-cinzel tracking-wider uppercase">エクスポート</span>
-                          </button>
-                          <button 
-                             onClick={() => { onExport('zip'); setShowMenu(false); }}
-                             className="w-full py-1.5 text-[8.5px] font-mono text-white/40 hover:text-sky-300 transition-colors text-center uppercase cursor-pointer"
-                          >
-                            EXPORT as .zip
-                          </button>
-                        </div>
-
-                        {!isEditorMode && (
-                          <div className="border-b border-white/5">
-                            <button 
-                              onClick={() => { onResetSession?.(); setShowScenarioMenu(false); setShowMenu(false); }} 
-                              className="w-full flex items-center gap-3 px-4 py-3 text-amber-400 hover:text-amber-300 hover:bg-amber-400/5 transition-colors text-left cursor-pointer"
-                            >
-                              <RotateCcw size={14} className="text-amber-400" />
-                              <span className="text-[10px] font-bold font-cinzel tracking-wider uppercase whitespace-nowrap">セッションリセット</span>
-                            </button>
-                          </div>
-                        )}
-
-                        {!isEditorMode && (
-                          <button 
-                            onClick={() => { onReset(); setShowMenu(false); }} 
-                            className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:text-red-500 hover:bg-red-500/5 transition-colors text-left"
-                          >
-                            <RotateCcw size={14} />
-                            <span className="text-[10px] font-bold font-cinzel tracking-wider uppercase whitespace-nowrap">リセット</span>
-                          </button>
-                        )}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
+                  <div className="flex items-center gap-3"><BookOpen size={16} /><span className="text-xs font-bold font-cinzel tracking-widest uppercase">シナリオ管理</span></div>
+                  <ChevronLeft size={14} className="rotate-180 text-white/25" />
+                </button>
 
                 <button 
                   onClick={() => {
@@ -1077,6 +951,23 @@ const Header: React.FC<HeaderProps> = React.memo(({
         themeColor={themeColor}
         customShortcuts={customShortcuts}
         isEditorMode={false}
+      />
+
+      <ScenarioManagerModal
+        isOpen={showScenarioManagerModal}
+        onClose={() => setShowScenarioManagerModal(false)}
+        user={user}
+        entries={scenarioEntries}
+        currentScenarioId={currentScenarioId || ''}
+        isEditorMode={isEditorMode}
+        switching={scenarioSwitching}
+        onSelect={(entry) => { onScenarioSelect?.(entry); setShowScenarioManagerModal(false); }}
+        onRegister={onRegisterLocalScenarios}
+        onToggleEditor={onToggleEditor}
+        onImport={onImport}
+        onExport={onExport}
+        onReset={onReset}
+        onResetSession={onResetSession}
       />
 
       {showExitTimePicker && onExitTimeChange && (

@@ -26,6 +26,7 @@ export interface GlobalShortcutsOptions {
   onUndo?: () => void;
   onRedo?: () => void;
   onSaveScenario?: () => void;
+  onSwitchScenarioSlot?: (slot: number) => void;
 }
 
 type ShortcutEvent = Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey' | 'preventDefault'>;
@@ -113,6 +114,10 @@ export function dispatchGlobalShortcut(event: ShortcutEvent, options: GlobalShor
   }
 
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && matchesLetter(event, 'p')) return consume(options.onTogglePhaseSearch);
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey) {
+    const slot = directMediaIndex();
+    if (slot >= 0) return consume(() => options.onSwitchScenarioSlot?.(slot));
+  }
   if (event.ctrlKey || event.altKey || event.metaKey) return false;
 
   const index = directMediaIndex();

@@ -8,6 +8,12 @@
 
 ## 変更履歴一覧 (Change History)
 
+### [2026-08-04] v0.98-dev.1 - シナリオ管理モーダルとシナリオ別進行保存
+- **管理UI (`ScenarioManagerModal.tsx`, `Header.tsx`)**: 左飛び出し式だったシナリオ管理を中央モーダルへ集約し、一覧・登録・入出力・編集モード・リセット・端末状態を同一画面で操作できるようにした。
+- **クイック切り替え (`useGlobalShortcuts.ts`)**: `Ctrl/Cmd + Shift + 1〜9` をMY SCENARIOSの一覧順切り替えに追加。既存のメディア数字キーとは競合しない。
+- **シナリオ別進行 (`StorageService.ts`, `useSyncEngine.ts`)**: IndexedDBの`sessions`を`scenarioId`キーで追加し、フェーズ、タイマー、結果、同期表示をシナリオごとに保存・復元。切り替え前にも明示保存する。
+- **マニュアル**: 管理モーダル、ショートカット、シナリオ別進行保持の使い方をMarkdown／Webマニュアルへ追記。
+
 ### [2026-08-04] v0.98-dev - マイシナリオと端末ローカルファイル紐づけ
 - **シナリオ台帳 (`ScenarioRegistryService.ts`)**: Googleアカウントにはタイトル・設定・fingerprint・更新日時だけを保存し、シナリオ本体やメディアバイナリは保存しない構成を追加。
 - **IndexedDB (`StorageService.ts`, `useSyncEngine.ts`)**: シナリオ本体と端末別`scenarioBindings`を分離。既存の固定キーを残したまま、シナリオIDごとの保存へ移行。
