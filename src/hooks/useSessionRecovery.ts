@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AppState } from '../types';
 import { sessionRecoveryService } from '../services/sessionRecoveryService';
 
@@ -19,12 +19,15 @@ declare global {
       callback: (deadline: IdleDeadline) => void,
       options?: RequestIdleCallbackOptions
     ): RequestIdleCallbackHandle;
+    cancelIdleCallback(handle: RequestIdleCallbackHandle): void;
   }
 }
 
 export function useSessionRecovery(isReady: boolean, state: AppState) {
   const [backupData, setBackupData] = useState<{ state: AppState; timestamp: number } | null>(null);
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const latestStateRef = useRef(state);
+  latestStateRef.current = state;
 
   useEffect(() => {
     let active = true;
@@ -54,28 +57,47 @@ export function useSessionRecovery(isReady: boolean, state: AppState) {
     };
   }, [isReady]);
 
-  // Periodic Auto-save logic (runs when app is ready)
+  // Periodic Auto-save logic (runs independently from React state identity changes)
   useEffect(() => {
     if (!isReady) return;
 
-    let timeoutId: number;
+    let cancelled = false;
+    let timeoutId: number | undefined;
+    let idleCallbackId: RequestIdleCallbackHandle | undefined;
 
-    const saveBackup = () => {
-      const execute = async () => {
-        await sessionRecoveryService.saveBackup(state);
-        timeoutId = window.setTimeout(saveBackup, 15000); // Save every 15 seconds
-      };
+    const scheduleSave = (delayMs: number) => {
+      timeoutId = window.setTimeout(() => {
+        if (cancelled) return;
 
-      if ('requestIdleCallback' in window) {
-        window.requestIdleCallback(execute, { timeout: 2000 });
-      } else {
-        execute();
-      }
+        const execute = async () => {
+          if (cancelled) return;
+          try {
+            await sessionRecoveryService.saveBackup(latestStateRef.current);
+          } catch (error) {
+            console.warn('[SessionRecovery] Periodic backup failed:', error);
+          } finally {
+            if (!cancelled) scheduleSave(15000);
+          }
+        };
+
+        if ('requestIdleCallback' in window) {
+          idleCallbackId = window.requestIdleCallback(() => { void execute(); }, { timeout: 2000 });
+        } else {
+          void execute();
+        }
+      }, delayMs);
     };
 
-    timeoutId = window.setTimeout(saveBackup, 5000);
-    return () => clearTimeout(timeoutId);
-  }, [isReady, state]);
+    scheduleSave(5000);
+
+    return () => {
+      cancelled = true;
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      if (idleCallbackId !== undefined && 'cancelIdleCallback' in window) {
+        window.cancelIdleCallback(idleCallbackId);
+      }
+    };
+  }, [isReady]);
 
   // Before unload handler to mark clean exit
   useEffect(() => {

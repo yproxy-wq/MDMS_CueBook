@@ -3,6 +3,9 @@ import { APP_VERSION } from '../config/version';
 
 export const UPDATE_LOGS = [
   { date: '2026.08.03', version: APP_VERSION, notes: [
+    'マイシナリオ: Googleアカウントにシナリオ一覧と設定だけを紐づけ、シナリオファイル本体は端末のIndexedDBに保持する構成を追加。',
+    '端末ごとのファイル紐づけ: 未紐づけ・更新版・別シナリオを分離判定し、誤ったファイル選択で現在の進行を壊さない導線を追加。',
+    'シナリオ切り替え: ハンバーガーメニューのMY SCENARIOSとscenarioId URLに対応。進行中は破棄確認を表示し、ブラウザの戻る／進むにも追従。',
     'ショートカット強化: Ctrl+Alt+W で Sync Studio、Ctrl+Alt+I と [ / ] で同期メディア、数字 1〜9 で指定メディアを操作できます。',
     '即時操作: Ctrl+Alt+B / S / R / N / P / Q と Space で、BGM・SE・タイマー・フェーズ・クイックアクションを素早く実行できます。',
     '誤操作防止: テキスト入力中はグローバルショートカットを無効化し、音源・タイマー・同期ウィンドウの操作判定を安定化しました。',

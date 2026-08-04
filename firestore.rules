@@ -92,6 +92,19 @@ service cloud.firestore {
       allow update: if false; 
     }
 
+    // My Scenarios stores only metadata and settings. Scenario files remain local
+    // to each device and are never accepted by this collection.
+    match /users/{userId}/scenarios/{scenarioId} {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
+      allow create, update: if isAuthenticated() && request.auth.uid == userId &&
+        scenarioId.size() > 0 && scenarioId.size() < 256 &&
+        (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() < 256)) &&
+        (!('fileNameHint' in request.resource.data) || (request.resource.data.fileNameHint is string && request.resource.data.fileNameHint.size() < 512)) &&
+        (!('fileFingerprint' in request.resource.data) || (request.resource.data.fileFingerprint is string && request.resource.data.fileFingerprint.size() < 256)) &&
+        (!('updatedAt' in request.resource.data) || request.resource.data.updatedAt is number);
+    }
+
     match /handouts/{userId}/characters/{handoutId} {
       // Owners may initialize a handout before it exists; public access still
       // requires an existing matching capability document.

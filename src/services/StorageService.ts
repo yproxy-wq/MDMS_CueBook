@@ -4,7 +4,17 @@ import { validateAndMigrateScenario } from '../utils/scenarioValidator';
 
 const DB_NAME = 'TheMastermindDeckDB';
 const STORE_NAME = 'scenarios';
-const DB_VERSION = 2;
+const BINDING_STORE_NAME = 'scenarioBindings';
+const DB_VERSION = 3;
+
+export interface ScenarioBinding {
+  scenarioId: string;
+  localScenarioKey: string;
+  fileName: string;
+  fileFingerprint: string;
+  boundAt: number;
+  updatedAt: number;
+}
 
 class StorageService {
   private db: IDBDatabase | null = null;
@@ -29,6 +39,10 @@ class StorageService {
           if (!db.objectStoreNames.contains('sessions')) {
             db.createObjectStore('sessions');
             console.log(`[IndexedDB/Storage] Created object store 'sessions' during upgrade.`);
+          }
+          if (!db.objectStoreNames.contains(BINDING_STORE_NAME)) {
+            db.createObjectStore(BINDING_STORE_NAME);
+            console.log(`[IndexedDB/Storage] Created object store '${BINDING_STORE_NAME}' during upgrade.`);
           }
         };
 
@@ -109,6 +123,27 @@ class StorageService {
 
   async loadScenario(id: string): Promise<Scenario | null> {
     return this.runTransaction(STORE_NAME, 'readonly', store => store.get(id)).then(result => result || null);
+  }
+
+  async listScenarioKeys(): Promise<string[]> {
+    const keys = await this.runTransaction<IDBValidKey[]>(STORE_NAME, 'readonly', store => store.getAllKeys());
+    return keys.map(key => String(key));
+  }
+
+  async saveBinding(binding: ScenarioBinding): Promise<void> {
+    await this.runTransaction(BINDING_STORE_NAME, 'readwrite', store => store.put(binding, binding.scenarioId));
+  }
+
+  async loadBinding(scenarioId: string): Promise<ScenarioBinding | null> {
+    return this.runTransaction(BINDING_STORE_NAME, 'readonly', store => store.get(scenarioId)).then(result => result || null);
+  }
+
+  async listBindings(): Promise<ScenarioBinding[]> {
+    return this.runTransaction<ScenarioBinding[]>(BINDING_STORE_NAME, 'readonly', store => store.getAll());
+  }
+
+  async deleteBinding(scenarioId: string): Promise<void> {
+    await this.runTransaction(BINDING_STORE_NAME, 'readwrite', store => store.delete(scenarioId));
   }
 
   migrateScenarioData(scen: Scenario): Scenario {

@@ -9,6 +9,7 @@ import ShortcutsGuideModal from './modals/ShortcutsGuideModal';
 import { UPDATE_LOGS } from '../data/updateLogs';
 import { User } from 'firebase/auth';
 import { Phase, CustomShortcuts } from '../types';
+import { ScenarioRegistryEntry } from '../services/ScenarioRegistryService';
 import TimePickerModal from './TimePickerModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { networkMonitor, NetworkState } from '../services/NetworkMonitor';
@@ -60,6 +61,11 @@ interface HeaderProps {
   scenarioName: string;
   phaseStartTime?: number;
   customShortcuts?: CustomShortcuts;
+  scenarioEntries?: ScenarioRegistryEntry[];
+  onScenarioSelect?: (entry: ScenarioRegistryEntry) => void;
+  onRegisterLocalScenarios?: () => void;
+  scenarioSwitching?: boolean;
+  currentScenarioId?: string;
 }
 
 const XIcon = ({ size = 16, className = "" }: { size?: number, className?: string }) => (
@@ -116,7 +122,12 @@ const Header: React.FC<HeaderProps> = React.memo(({
   onResetTimer,
   onAdjustTimer,
   onPrevTimer,
-  onNextTimer
+  onNextTimer,
+  scenarioEntries = [],
+  onScenarioSelect,
+  onRegisterLocalScenarios,
+  scenarioSwitching = false,
+  currentScenarioId,
 }) => {
   const [showUpdateLog, setShowUpdateLog] = useState(false);
   const [showScenarioMap, setShowScenarioMap] = useState(false);
@@ -827,6 +838,43 @@ const Header: React.FC<HeaderProps> = React.memo(({
                         <div className="px-4 py-3 bg-emerald-500/10 border-b border-white/10">
                           <span className="text-[9px] font-bold font-cinzel text-emerald-400 tracking-[0.3em] uppercase">Scenario MGMT</span>
                         </div>
+                        {scenarioEntries.length > 0 && (
+                          <div className="border-b border-white/10 px-2 py-2">
+                            <div className="px-2 pb-1 text-[8px] font-mono tracking-[0.18em] text-white/35 uppercase">MY SCENARIOS</div>
+                            <div className="max-h-48 overflow-y-auto space-y-0.5">
+                              {scenarioEntries.map(entry => {
+                                const isCurrent = entry.scenarioId === currentScenarioId || entry.title === scenarioName;
+                                const status = entry.availability === 'available' ? '●' : entry.availability === 'mismatch' ? '!' : entry.availability === 'syncing' ? '…' : '○';
+                                const statusClass = entry.availability === 'available' ? 'text-emerald-400' : entry.availability === 'mismatch' ? 'text-amber-400' : 'text-white/35';
+                                return (
+                                  <button
+                                    key={entry.scenarioId}
+                                    disabled={scenarioSwitching}
+                                    onClick={() => onScenarioSelect?.(entry)}
+                                    className={`w-full flex items-center gap-2 rounded-md px-2 py-2 text-left transition-colors ${isCurrent ? 'bg-emerald-400/10 text-emerald-200' : 'text-white/70 hover:bg-white/5 hover:text-white'} disabled:opacity-50`}
+                                    title={entry.availability === 'unbound' ? 'この端末のファイルを紐づけます' : entry.availability === 'mismatch' ? '更新版または別ファイルを確認します' : entry.title}
+                                  >
+                                    <span className={`font-mono text-[10px] ${statusClass}`}>{status}</span>
+                                    <span className="min-w-0 flex-1 truncate text-[10px] font-bold">{entry.title}</span>
+                                    <span className="shrink-0 text-[8px] font-mono text-white/30">{entry.availability === 'available' ? 'READY' : entry.availability === 'unbound' ? 'BIND' : entry.availability.toUpperCase()}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {onRegisterLocalScenarios && user && (
+                              <button
+                                onClick={onRegisterLocalScenarios}
+                                disabled={scenarioSwitching}
+                                className="mt-1 w-full rounded-md px-2 py-1.5 text-left text-[9px] font-mono text-sky-300/80 hover:bg-sky-400/10 hover:text-sky-200 disabled:opacity-50"
+                              >
+                                + この端末のシナリオを登録
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        {scenarioSwitching && (
+                          <div className="px-4 py-2 text-[9px] font-mono text-amber-300 border-b border-white/5">SCENARIO SWITCHING…</div>
+                        )}
                         {/* Play / Edit Session Toggle */}
                         <button 
                           onClick={() => {

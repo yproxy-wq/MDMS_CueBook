@@ -766,6 +766,17 @@
             <img src="https://github.com/yproxy-wq/MDMS_CueBook/blob/main/20-gentai.png?raw=true" alt="現在時刻と退出時刻" referrerpolicy="no-referrer">
             <figcaption>現在時刻および目標退出時刻のモニタリング</figcaption>
           </figure>
+
+          <div class="grid-2">
+            <article class="card">
+              <h3>MY SCENARIOS</h3>
+              <p>ハンバーガーメニューの「シナリオ管理」から、Googleアカウントに登録したシナリオを切り替えます。アカウントにはタイトル・設定・更新情報だけが保存され、シナリオファイル本体は各端末のIndexedDBに残ります。</p>
+            </article>
+            <article class="card">
+              <h3>端末ごとのファイル紐づけ</h3>
+              <p>別端末では一覧に <code>○ BIND</code> と表示されます。対象の `.cuebook` / `.json` / `.zip` を選ぶと、その端末で利用可能になります。同じ <code>scenarioId</code> の手直し版は更新版として確認し、別IDのファイルは拒否します。</p>
+            </article>
+          </div>
         </section>
 
         <!-- 05. タイマー -->
@@ -1167,7 +1178,7 @@
           <span class="section-num">SECTION 07</span>
           <h2 class="section-title">シナリオの保存とエクスポート (.cuebook)</h2>
           <p class="section-desc">
-            作成したシナリオデータは、軽量な `.cuebook` ファイル（JSON形式）としてPC・タブレットへエクスポートできます。また、Firestoreバックアップ同期により、別端末への引継ぎも即座に行えます。
+            作成したシナリオデータは、軽量な `.cuebook` ファイル（JSON形式）としてPC・タブレットへエクスポートできます。Googleアカウントへはタイトル・設定・更新情報だけを同期し、別端末ではシナリオファイルをローカルから紐づけます。
           </p>
 
           <div class="grid-2">
@@ -1401,7 +1412,7 @@
         <div id="footerLabelRun">CUEBOOK / RUN MODE MANUAL</div>
         <div id="footerLabelEdit" style="display: none;">CUEBOOK / EDIT MODE MANUAL</div>
         <div id="footerLabelSync" style="display: none;">CUEBOOK / SYNC WINDOW MANUAL</div>
-        <div>cuebook-system v0.97</div>
+        <div>cuebook-system v0.98-dev</div>
       </footer>
     </main>
   </div>

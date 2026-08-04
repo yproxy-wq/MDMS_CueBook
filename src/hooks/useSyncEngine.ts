@@ -4,6 +4,7 @@ import { AppState, Phase } from '../types';
 import { storageService } from '../services/StorageService';
 import { INITIAL_SCENARIO } from '../constants';
 import { useTimerSync } from './useTimerSync';
+import { fingerprintScenario, legacyScenarioKey } from '../services/ScenarioRegistryService';
 
 interface UseSyncEngineProps {
   user: User | null;
@@ -13,6 +14,7 @@ interface UseSyncEngineProps {
   setIsReady: (ready: boolean) => void;
   activeTimerIndex: number;
   currentPhase: Phase | null | undefined;
+  scenarioId?: string | null;
 }
 
 export function useSyncEngine({
@@ -22,14 +24,16 @@ export function useSyncEngine({
   isReady,
   setIsReady,
   activeTimerIndex,
-  currentPhase
+  currentPhase,
+  scenarioId
 }: UseSyncEngineProps) {
 
   // 1. Load initial scenario from IndexedDB on mount
   useEffect(() => {
     const initApp = async () => {
       try {
-        const saved = await storageService.loadScenario('gm_accomplice_scenario');
+        const requested = scenarioId ? await storageService.loadScenario(scenarioId) : null;
+        const saved = requested || await storageService.loadScenario(legacyScenarioKey);
         const scenarioToLoad = storageService.migrateScenarioData(saved || INITIAL_SCENARIO);
 
         const initialTimers: Record<string, { seconds: number; isRunning: boolean; startTime: number | null }> = {};
@@ -54,13 +58,25 @@ export function useSyncEngine({
       }
     };
     initApp();
-  }, [setState, setIsReady]);
+  }, [scenarioId, setState, setIsReady]);
 
   // 2. Auto-save scenario edits to IndexedDB
   useEffect(() => {
     if (isReady) {
-      storageService.saveScenario('gm_accomplice_scenario', state.currentScenario)
-        .catch(e => console.error("useSyncEngine: Auto-save error:", e));
+      const persist = async () => {
+        await storageService.saveScenario(state.currentScenario.id, state.currentScenario);
+        // Keep the legacy key alive for rollback compatibility while old clients exist.
+        await storageService.saveScenario(legacyScenarioKey, state.currentScenario);
+        const binding = await storageService.loadBinding(state.currentScenario.id);
+        if (binding) {
+          await storageService.saveBinding({
+            ...binding,
+            fileFingerprint: await fingerprintScenario(state.currentScenario),
+            updatedAt: Date.now(),
+          });
+        }
+      };
+      persist().catch(e => console.error("useSyncEngine: Auto-save error:", e));
     }
   }, [state.currentScenario, isReady]);
 

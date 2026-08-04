@@ -86,7 +86,7 @@ describe('SyncService capability integration', () => {
 
   it('rejects writes and subscriptions that use a predictable legacy session ID', async () => {
     const update = vi.fn();
-    await syncService.setTimerInstant('gm-a_scenario-1', timerData);
+    await expect(syncService.setTimerInstant('gm-a_scenario-1', timerData)).rejects.toThrow('Timer sync write failed');
     syncService.subscribeToTimer('gm-a_scenario-1', update);
     await Promise.resolve();
 
@@ -100,8 +100,9 @@ describe('SyncService capability integration', () => {
     const shareId = 'b'.repeat(64);
     const sessionId = createHandoutSessionId('gm-b', shareId);
 
-    await syncService.updateHandout(sessionId, { playerPresentAt: 'presence-marker' });
+    const completion = syncService.updateHandout(sessionId, { playerPresentAt: 'presence-marker' });
     await vi.advanceTimersByTimeAsync(500);
+    await completion;
 
     expect(firestore.doc).toHaveBeenCalledWith(firebase.db, 'handouts', 'gm-b', 'characters', shareId);
     expect(firestore.setDoc).toHaveBeenCalledWith(
@@ -109,6 +110,28 @@ describe('SyncService capability integration', () => {
       expect.objectContaining({ playerPresentAt: 'presence-marker', shareId }),
       { merge: true },
     );
+    vi.useRealTimers();
+  });
+
+  it('waits for durable handout completion and retries a failed write without dropping the payload', async () => {
+    vi.useFakeTimers();
+    const shareId = 'd'.repeat(64);
+    const sessionId = createHandoutSessionId('gm-d', shareId);
+    const firstError = new Error('offline');
+    firestore.setDoc.mockRejectedValueOnce(firstError).mockResolvedValue(undefined);
+
+    const completion = syncService.updateHandout(sessionId, { characterId: 'char-d', characterName: 'D' });
+    const rejection = completion.catch((error) => error);
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(rejection).resolves.toBe(firstError);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(firestore.setDoc).toHaveBeenCalledTimes(2);
+    expect(firestore.setDoc.mock.calls[1][1]).toEqual(expect.objectContaining({
+      characterId: 'char-d',
+      characterName: 'D',
+      shareId,
+    }));
     vi.useRealTimers();
   });
 

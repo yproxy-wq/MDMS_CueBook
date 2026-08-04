@@ -34,6 +34,7 @@ interface LastSyncTracker {
 }
 
 const lastSyncCache: Record<string, LastSyncTracker> = {};
+const syncWriteSequences: Record<string, number> = {};
 
 export function useTimerSync(
   user: User | null,
@@ -292,8 +293,7 @@ export function useTimerSync(
       return;
     }
 
-    // Update the reference cache
-    lastSyncCache[sessionId] = {
+    const nextSyncCache: LastSyncTracker = {
       time: now,
       seconds: timerState.seconds,
       isRunning: timerState.isRunning,
@@ -321,12 +321,23 @@ export function useTimerSync(
 
     // CRITICAL: Status changes (Start/Stop) or manual timer adjustments should be INSTANT.
     // Configuration adjustments, layout choices, and media swaps are debounced to prevent Firestore write spikes.
-    if (hasStatusChanged || isManualAdjustment) {
-      syncService.setTimerInstant(sessionId, dataToSync);
-    } else {
-      // Configuration transitions and periodic heartbeats are debounced safely
-      syncService.updateTimer(sessionId, dataToSync);
-    }
+    const writeSequence = (syncWriteSequences[sessionId] || 0) + 1;
+    syncWriteSequences[sessionId] = writeSequence;
+    const writePromise = hasStatusChanged || isManualAdjustment
+      ? syncService.setTimerInstant(sessionId, dataToSync)
+      : syncService.updateTimer(sessionId, dataToSync);
+
+    // Treat the local snapshot as synchronized only after durable completion.
+    void writePromise.then(() => {
+      if (syncWriteSequences[sessionId] === writeSequence) {
+        lastSyncCache[sessionId] = nextSyncCache;
+      }
+    }).catch((error) => {
+      if (syncWriteSequences[sessionId] === writeSequence) {
+        delete lastSyncCache[sessionId];
+      }
+      console.warn('[Sync] Durable write failed; the next state change will retry:', error);
+    });
   }, [
     state.timerStates, 
     state.currentPhaseId, 
@@ -399,7 +410,9 @@ export function useTimerSync(
       timerLabelText: state.syncConfig?.timerLabelText || syncData?.timerLabelText || null,
     };
 
-    syncService.setTimerInstant(sessionId, dataToSync);
+    syncService.setTimerInstant(sessionId, dataToSync).catch((error) => {
+      console.warn('[Sync] Force sync write failed:', error);
+    });
   };
 
   return { syncData, setSyncData, forceSync };

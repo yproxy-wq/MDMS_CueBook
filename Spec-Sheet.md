@@ -84,13 +84,23 @@
    - `Ctrl + Alt + Q` で起動可能なクイックアクションダイアログ。全音声即時停止、タイマーリセット、フェーズ検索、同期設定、各種設定へワンタップアクセス。
 5. **ネットワーク・同期シューター (`SyncTroubleshooter.tsx`, `NetworkToast.tsx`)**:
    - Firestore クォータ・ネットワーク状態は通知とSystem Recoveryで案内する。常時表示される「同期がうまくいかないときは？」診断バーは設けない。
-6. **利用者向けUpdate Log (v0.97s)**:
-   - 表示用のリリース識別子は `src/config/version.ts` の `APP_VERSION` を正とし、ヘッダー、ヘルプ、初期ガイド、Update Logで v0.97s を一貫して表示する。
-   - 表示内容はショートカットキーの追加・改善と細かなバグフィックスに限定し、v1.08 / v1.09 の技術履歴はアプリ内のUpdate Logに表示しない。
+6. **利用者向けUpdate Log (v0.98-dev)**:
+   - 表示用のリリース識別子は `src/config/version.ts` の `APP_VERSION` を正とし、ヘッダー、ヘルプ、初期ガイド、Update Logで v0.98-dev を一貫して表示する。
+   - 表示内容は利用者向けのシナリオ管理・ショートカット改善・細かなバグフィックスに限定し、v1.08 / v1.09 の技術履歴はアプリ内のUpdate Logに表示しない。
+8. **マイシナリオと端末ローカルファイル紐づけ**:
+   - ハンバーガーメニューの「シナリオ管理」から、Googleアカウントに紐づいたシナリオ台帳を表示・切り替えできる。
+   - FirestoreにはシナリオID、タイトル、更新日時、設定、ファイルfingerprintだけを保存し、シナリオ本体・画像・音声バイナリは保存しない。
+   - IndexedDBの`scenarios`は端末内のシナリオ本体、`scenarioBindings`は端末ごとのファイル紐づけを保持する。未紐づけ、利用可能、更新版確認を明示する。
+   - 同一`scenarioId`でfingerprintだけが変わったファイルは更新版として確認し、IDが異なるファイルは現在のシナリオを変更せず拒否する。
+   - `/session?scenarioId=<id>` および `/edit?scenarioId=<id>` を直接開け、ブラウザの戻る／進むでも切り替える。未紐づけの場合はファイル選択へ誘導する。
 7. **レスポンシブ台本背景**:
    - PCの3カラムとタブレットの2カラムでは、台本領域を半透明の暗色レイヤーと軽い背景ぼかしで描画し、背景画像の雰囲気と台本の可読性を両立する。
 
 ### E. 配備・品質ゲート (Firebase Hosting)
+0. **フロントエンドCSSビルド**:
+   - Tailwind CSS は `@tailwindcss/vite` と `src/index.css` でビルド時に生成する。
+   - `index.html` はTailwind CDNや外部import mapを読み込まず、実行時JIT生成に依存しない。
+   - Timer共有画面、Handout共有画面、シナリオ入出力用JSZipは動的importで分割し、通常のGM画面の初期バンドルへ含めない。
 1. **Firebase Hosting 設定**:
    - `firebase.json` は `dist` を配備し、存在しない任意パスを `/index.html` へ rewrite する SPA 構成。
    - rewrite 前の URL を対象に、アプリシェルは再検証、`/assets/**` はハッシュ付き静的 asset として長期 immutable cache を適用する。
@@ -136,7 +146,7 @@
 ### F. データ整合性・設計原則 (v1.10)
 1. **ACID 境界**:
    - IndexedDB の保存完了は request 成功ではなく transaction `complete` を基準とする。abort/error は失敗として扱う。
-   - Firestore のデバウンス／集約書込みは durable write の完了まで保留データを破棄せず、失敗時に再試行可能な状態を維持する。
+   - Firestore のデバウンス／集約書込みは durable write の完了Promiseを返し、完了まで保留データを破棄しない。失敗時は保留データを保持して再試行可能な状態を維持する。
 2. **UNIX 哲学に基づく責務分離**:
    - `StorageService.runTransaction` は IndexedDB トランザクションだけを担当し、シナリオの移行は `scenarioValidator` に委譲する。
    - `WriteBloatGuardian` は書込み頻度の集約と完了通知だけを担当し、Firestore のデータ変換・パス解決とは分離する。
@@ -174,8 +184,11 @@
 - `src/hooks/useGlobalShortcuts.test.ts`: Sync Studio、メディア、BGM/SE、タイマー、フェーズ操作のショートカット回帰試験
 - `src/services/AudioService.ts`: Web Audio API シングルトン管理クラス
 - `src/services/SyncService.ts`: Firebase Firestore リアルタイム同期層
+- `src/services/ScenarioRegistryService.ts`: Googleアカウントのシナリオ台帳、設定同期、fingerprint、端末紐づけ境界
+- `src/services/StorageService.ts`: IndexedDBシナリオ本体、セッション、端末別`scenarioBindings`の永続化
 - `src/hooks/useAppTimer.ts`: 既存タイマー互換の 1 秒表示フック
 - `src/hooks/useDisplayNow.ts` / `src/components/LiveHeader.tsx`: root state を更新せず leaf component と Header wrapper で表示時刻を更新する層
+- `src/index.css` / `vite.config.ts`: Tailwind CSS のビルド時生成とグローバルCSSエントリ
 - `src/components/DebouncedInput.tsx`: 450ms を標準とする textarea 用デバウンス入力
 - `firebase.json` / `.firebaserc`: Firebase Hosting の配備先・SPA rewrite・キャッシュ設定
 - `修正指示書_2026-08-02.md`: Firebase Hosting 配備前の問題一覧、再発防止策、残存リスク

@@ -8,6 +8,23 @@
 
 ## 変更履歴一覧 (Change History)
 
+### [2026-08-04] v0.98-dev - マイシナリオと端末ローカルファイル紐づけ
+- **シナリオ台帳 (`ScenarioRegistryService.ts`)**: Googleアカウントにはタイトル・設定・fingerprint・更新日時だけを保存し、シナリオ本体やメディアバイナリは保存しない構成を追加。
+- **IndexedDB (`StorageService.ts`, `useSyncEngine.ts`)**: シナリオ本体と端末別`scenarioBindings`を分離。既存の固定キーを残したまま、シナリオIDごとの保存へ移行。
+- **シナリオ管理 (`Header.tsx`, `App.tsx`)**: 左へ飛び出すMY SCENARIOS一覧、利用可能／紐づけ未完了表示、端末ファイル選択、更新版確認、進行破棄確認、`scenarioId` URL切り替えを追加。
+- **安全性**: ID一致・fingerprint差分を分離判定し、別シナリオのファイル選択や未紐づけURLで現在の進行を破棄しないようにした。Firestore rulesに所有者限定のシナリオ台帳ルールを追加。
+- **マニュアル**: `MANUAL.md` とWebマニュアルに端末2での初回紐づけ、更新版、未紐づけ時の挙動を追記。
+
+### [2026-08-04] v0.97s.8 - 共有画面とJSZipの遅延ロード
+- **初期バンドル (`App.tsx`)**: Timer共有画面、Handout共有画面、シナリオ入出力用JSZipを必要時の動的importへ移行。
+- **効果**: production buildの初期メインJSをgzip約503.5KBから約463.7KBへ削減。
+
+### [2026-08-04] v0.97s.7 - 同期永続化の完了保証とTailwindビルド移行
+- **Firestore同期 (`SyncService.ts`, `useTimerSync.ts`)**: Timer／Handoutのデバウンス書込みがdurable write完了を返すようにし、失敗時の保留データ保持・再試行、世代の異なる更新の保護を追加。
+- **セッション復旧 (`useSessionRecovery.ts`)**: React stateの置換でバックアップスケジュールが再起動しないよう、最新state参照とアイドル時保存の固定スケジュールへ変更。
+- **CSSビルド (`index.html`, `src/index.css`, `vite.config.ts`)**: Tailwind CDN／外部import mapを除去し、`@tailwindcss/vite`によるビルド時CSS生成へ移行。既存のインラインデザインCSSは維持。
+- **品質**: 型検査、lint、75件のユニットテスト、production buildを通過。
+
 ### [2026-08-04] v0.97s.6 - Biz-Xtvブランドマーク右移動
 - **XTVロゴ位置 (`Header.tsx`)**: XTVブランドマークを現位置から10px右へ移動。CueBook文字を前面、マークを下層とするスタッキング順は維持。
 

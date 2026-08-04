@@ -70,11 +70,15 @@ export interface HandoutSyncData {
 // Storage for pending data to ensure latest version is sent
 const pendingTimerUpdates = new Map<string, { data: TimerSyncData; isCritical: boolean; scheduledTime: number }>();
 const timerFlushIntervals = new Map<string, NodeJS.Timeout>();
+const pendingTimerWaiters = new Map<string, Array<{ resolve: () => void; reject: (error: unknown) => void }>>();
 
 const pendingHandoutData = new Map<string, Partial<HandoutSyncData>>();
 const debounceTimers = new Map<string, NodeJS.Timeout>();
 const lastHandoutSyncCache = new Map<string, string>();
+const pendingHandoutWaiters = new Map<string, Array<{ resolve: () => void; reject: (error: unknown) => void }>>();
 const DEBOUNCE_MS = 500; 
+const HANDOUT_RETRY_MS = 2000;
+const TIMER_RETRY_MS = 2000;
 
 // Automatic safeguard class to detect and prevent Firebase write bloat (frequent automatic writes)
 export class WriteBloatGuardian {
@@ -181,20 +185,113 @@ function prepareDataForFirestore(data: TimerSyncData): TimerSyncData {
   return dataToSync;
 }
 
+function handoutCacheSignature(data: Partial<HandoutSyncData>) {
+  return JSON.stringify(sanitizeForFirestore(data));
+}
+
+function settleHandoutWaiters(key: string, error?: unknown) {
+  const waiters = pendingHandoutWaiters.get(key) ?? [];
+  pendingHandoutWaiters.delete(key);
+  waiters.forEach((waiter) => error === undefined ? waiter.resolve() : waiter.reject(error));
+}
+
+function settleTimerWaiters(sessionId: string, error?: unknown) {
+  const waiters = pendingTimerWaiters.get(sessionId) ?? [];
+  pendingTimerWaiters.delete(sessionId);
+  waiters.forEach((waiter) => error === undefined ? waiter.resolve() : waiter.reject(error));
+}
+
+function scheduleTimerFlush(sessionId: string, delayMs = 2000) {
+  if (timerFlushIntervals.has(sessionId)) return;
+  const timeout = setTimeout(() => {
+    void flushTimerWrite(sessionId);
+  }, delayMs);
+  timerFlushIntervals.set(sessionId, timeout);
+}
+
+function scheduleHandoutFlush(key: string, fullSessionId: string, delayMs = DEBOUNCE_MS) {
+  if (debounceTimers.has(key)) return;
+  const timeout = setTimeout(() => {
+    debounceTimers.delete(key);
+    void flushHandoutWrite(key, fullSessionId);
+  }, delayMs);
+  debounceTimers.set(key, timeout);
+}
+
+async function flushHandoutWrite(key: string, fullSessionId: string) {
+  const latestData = pendingHandoutData.get(key);
+  if (!latestData) {
+    settleHandoutWaiters(key);
+    return;
+  }
+
+  if (isQuotaExceeded()) {
+    settleHandoutWaiters(key, new Error('Firestore quota is currently exceeded.'));
+    return;
+  }
+
+  const { userId, isSecure } = parseHandoutId(fullSessionId);
+  if (!isSecure) {
+    pendingHandoutData.delete(key);
+    settleHandoutWaiters(key, new Error('Refused to write a legacy predictable handout session.'));
+    return;
+  }
+
+  const handoutDocumentId = getHandoutDocumentId(fullSessionId);
+  const handoutRef = doc(db, 'handouts', userId, 'characters', handoutDocumentId);
+  const writePath = `handouts/${userId}/characters/${handoutDocumentId}`;
+  const payload = sanitizeForFirestore({
+    ...latestData,
+    shareId: handoutDocumentId,
+    lastUpdated: serverTimestamp()
+  });
+
+  try {
+    await WriteBloatGuardian.execute(writePath, async () => {
+      await networkMonitor.withExponentialBackoff(
+        `updateHandout: ${handoutDocumentId}`,
+        () => setDoc(handoutRef, payload, { merge: true })
+      );
+    });
+
+    // Keep a newer payload that arrived while this write was in flight.
+    if (pendingHandoutData.get(key) === latestData) {
+      pendingHandoutData.delete(key);
+    }
+    lastHandoutSyncCache.set(key, handoutCacheSignature(latestData));
+    settleHandoutWaiters(key);
+  } catch (error) {
+    // Preserve the payload and retry later; a failed durable write must not acknowledge the update.
+    console.error(`[SyncService] Update handout failed: ${writePath}`, error);
+    lastHandoutSyncCache.delete(key);
+    settleHandoutWaiters(key, error);
+    scheduleHandoutFlush(key, fullSessionId, HANDOUT_RETRY_MS);
+    handleFirestoreError(error, OperationType.WRITE, writePath);
+  }
+}
+
 // Flush routine to execute combined timer & content writes
-async function flushTimerWrite(sessionId: string) {
+async function flushTimerWrite(sessionId: string): Promise<boolean> {
   const pending = pendingTimerUpdates.get(sessionId);
-  if (!pending) return;
+  if (!pending) {
+    settleTimerWaiters(sessionId);
+    return true;
+  }
 
   // Release only the timer handle. Keep the payload until the durable write succeeds.
   timerFlushIntervals.delete(sessionId);
 
-  if (isQuotaExceeded()) return;
+  if (isQuotaExceeded()) {
+    settleTimerWaiters(sessionId, new Error('Firestore quota is currently exceeded.'));
+    return false;
+  }
 
   const { userId, subSessionId, isSecure } = parseSessionId(sessionId);
   if (!isSecure) {
     console.warn('[SyncService] Refused to write legacy predictable timer session.');
-    return;
+    pendingTimerUpdates.delete(sessionId);
+    settleTimerWaiters(sessionId, new Error('Refused to write a legacy predictable timer session.'));
+    return false;
   }
   const timerRef = doc(db, 'timerSessions', userId, 'sessions', subSessionId);
   const dataToSync = { ...prepareDataForFirestore(pending.data), shareId: subSessionId };
@@ -216,15 +313,20 @@ async function flushTimerWrite(sessionId: string) {
     if (pendingTimerUpdates.get(sessionId) === pending) {
       pendingTimerUpdates.delete(sessionId);
     }
+    settleTimerWaiters(sessionId);
+    return true;
   } catch (error) {
-    // Preserve the pending payload for an explicit retry/instant flush.
+    // Preserve the pending payload and retry later; a failed durable write must not acknowledge it.
     handleFirestoreError(error, OperationType.WRITE, writePath);
+    settleTimerWaiters(sessionId, error);
+    scheduleTimerFlush(sessionId, TIMER_RETRY_MS);
+    return false;
   }
 }
 
 export const syncService = {
   async updateTimer(sessionId: string, data: TimerSyncData) {
-    if (isQuotaExceeded()) return;
+    if (isQuotaExceeded()) return Promise.reject(new Error('Firestore quota is currently exceeded.'));
     
     // Merge data into the current aggregated timer session update
     const existing = pendingTimerUpdates.get(sessionId);
@@ -236,13 +338,14 @@ export const syncService = {
       scheduledTime: existing?.scheduledTime || Date.now()
     });
 
+    const completion = new Promise<void>((resolve, reject) => {
+      const waiters = pendingTimerWaiters.get(sessionId) ?? [];
+      waiters.push({ resolve, reject });
+      pendingTimerWaiters.set(sessionId, waiters);
+    });
     // Schedule or hold routine flush - throttles updates up to 2000ms
-    if (!timerFlushIntervals.has(sessionId)) {
-      const timeout = setTimeout(() => {
-        flushTimerWrite(sessionId);
-      }, 2000); // 2-second routine aggregation & batching window
-      timerFlushIntervals.set(sessionId, timeout);
-    }
+    scheduleTimerFlush(sessionId, 2000);
+    return completion;
   },
 
   async resetTimerSession(sessionId: string) {
@@ -254,6 +357,7 @@ export const syncService = {
       timerFlushIntervals.delete(sessionId);
     }
     pendingTimerUpdates.delete(sessionId);
+    settleTimerWaiters(sessionId, new Error('Timer session was reset before the write completed.'));
 
     const { userId, subSessionId, isSecure } = parseSessionId(sessionId);
     if (!isSecure) return;
@@ -273,7 +377,7 @@ export const syncService = {
   },
 
   async setTimerInstant(sessionId: string, data: TimerSyncData) {
-    if (isQuotaExceeded()) return;
+    if (isQuotaExceeded()) return Promise.reject(new Error('Firestore quota is currently exceeded.'));
     
     // Cancel any pending deferred timer updates and flush write immediately
     if (timerFlushIntervals.has(sessionId)) {
@@ -290,7 +394,10 @@ export const syncService = {
       scheduledTime: Date.now()
     });
 
-    await flushTimerWrite(sessionId);
+    const succeeded = await flushTimerWrite(sessionId);
+    if (!succeeded) {
+      throw new Error(`Timer sync write failed for ${sessionId}`);
+    }
   },
 
   subscribeToTimer(sessionId: string, onUpdate: (data: TimerSyncData | null) => void) {
@@ -319,70 +426,24 @@ export const syncService = {
   },
 
   async updateHandout(fullSessionId: string, data: Partial<HandoutSyncData>) {
-    if (isQuotaExceeded()) return;
+    if (isQuotaExceeded()) return Promise.reject(new Error('Firestore quota is currently exceeded.'));
     const key = `handout_${fullSessionId}`;
     
     // Always merge the newest partial data
     const existingData = pendingHandoutData.get(key) || {};
     pendingHandoutData.set(key, { ...existingData, ...data });
 
-    if (debounceTimers.has(key)) return;
+    if (lastHandoutSyncCache.get(key) === handoutCacheSignature(pendingHandoutData.get(key)!)) {
+      return Promise.resolve();
+    }
 
-    const timeout = setTimeout(async () => {
-      debounceTimers.delete(key);
-      const latestData = pendingHandoutData.get(key);
-      pendingHandoutData.delete(key);
-
-      if (!latestData || isQuotaExceeded()) return;
-
-      const { userId, isSecure } = parseHandoutId(fullSessionId);
-      if (!isSecure) {
-        console.warn('[SyncService] Refused to write legacy predictable handout session.');
-        return;
-      }
-      const handoutDocumentId = getHandoutDocumentId(fullSessionId);
-
-      // Create stable comparable entry
-      const cacheEntry = {
-        characterId: latestData.characterId,
-        characterName: latestData.characterName,
-        characterRole: latestData.characterRole,
-        characterColor: latestData.characterColor,
-        scenarioTitle: latestData.scenarioTitle,
-      };
-      
-      const stringified = JSON.stringify(cacheEntry);
-      if (lastHandoutSyncCache.get(key) === stringified) {
-        console.log(`[SyncService] Skipping redundant handout metadata write: ${userId}/characters/${handoutDocumentId}`);
-        return;
-      }
-
-      // Record in cache before we initiate setDoc to block downstream duplicates
-      lastHandoutSyncCache.set(key, stringified);
-
-      console.log(`[SyncService] Updating handout (stable debounce): ${userId}/characters/${handoutDocumentId}`, latestData);
-      const handoutRef = doc(db, 'handouts', userId, 'characters', handoutDocumentId);
-      const writePath = `handouts/${userId}/characters/${handoutDocumentId}`;
-      try {
-        await WriteBloatGuardian.execute(writePath, async () => {
-          await networkMonitor.withExponentialBackoff(
-            `updateHandout: ${handoutDocumentId}`,
-          () => setDoc(handoutRef, sanitizeForFirestore({
-              ...latestData,
-              shareId: handoutDocumentId,
-              lastUpdated: serverTimestamp()
-            }), { merge: true })
-          );
-        });
-      } catch (error) {
-        console.error(`[SyncService] Update handout failed: ${writePath}`, error);
-        // Clear cache if write fails so we can retry on next change
-        lastHandoutSyncCache.delete(key);
-        handleFirestoreError(error, OperationType.WRITE, writePath);
-      }
-    }, DEBOUNCE_MS);
-
-    debounceTimers.set(key, timeout);
+    const completion = new Promise<void>((resolve, reject) => {
+      const waiters = pendingHandoutWaiters.get(key) ?? [];
+      waiters.push({ resolve, reject });
+      pendingHandoutWaiters.set(key, waiters);
+    });
+    scheduleHandoutFlush(key, fullSessionId);
+    return completion;
   },
 
   async sendHandoutMessage(fullSessionId: string, message: string) {
@@ -519,6 +580,7 @@ export const syncService = {
       timerFlushIntervals.delete(sessionId);
     }
     pendingTimerUpdates.delete(sessionId);
+    settleTimerWaiters(sessionId, new Error('Session was cleared before the timer write completed.'));
 
     // Clean up handouts associated with this sessionId
     const handoutPrefix = `handout_${sessionId}`;
@@ -531,6 +593,11 @@ export const syncService = {
     for (const key of Array.from(pendingHandoutData.keys())) {
       if (key.startsWith(handoutPrefix)) {
         pendingHandoutData.delete(key);
+      }
+    }
+    for (const key of Array.from(pendingHandoutWaiters.keys())) {
+      if (key.startsWith(handoutPrefix)) {
+        settleHandoutWaiters(key, new Error('Session was cleared before the handout write completed.'));
       }
     }
     for (const key of Array.from(lastHandoutSyncCache.keys())) {
