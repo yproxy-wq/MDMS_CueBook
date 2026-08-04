@@ -1514,6 +1514,8 @@ function App() {
 
   const commitScenarioSwitch = useCallback(async (entry: ScenarioRegistryEntry, scenario: Scenario) => {
     const current = latestStateRef.current;
+    // AppState has one active scenario at a time. Progress remains parallel
+    // in IndexedDB, so persist the current session before replacing it.
     const currentSession: ScenarioSessionSnapshot = {
       scenarioId: current.currentScenario.id,
       currentPhaseId: current.currentPhaseId,

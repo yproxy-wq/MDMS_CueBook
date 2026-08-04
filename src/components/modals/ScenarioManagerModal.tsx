@@ -146,7 +146,7 @@ const ScenarioManagerModal: React.FC<ScenarioManagerModalProps> = ({
             <aside className="space-y-3">
               <div className="rounded-xl border border-emerald-400/15 bg-emerald-400/5 p-4">
                 <div className="mb-2 flex items-center gap-2 font-cinzel text-[10px] font-bold tracking-widest text-emerald-200"><Layers3 size={14} /> PARALLEL PROGRESS</div>
-                <p className="text-[10px] leading-relaxed text-white/50">シナリオごとに進行状況を保持。リンクから開いても、そのシナリオの続きから再開できます。</p>
+                <p className="text-[10px] leading-relaxed text-white/50">進行状況はシナリオごとに保持します。画面上でアクティブになるのは常に1シナリオだけで、切り替え前に現在の進行を保存します。</p>
               </div>
 
               <div className="rounded-xl border border-white/10 bg-white/[0.025] p-4">
