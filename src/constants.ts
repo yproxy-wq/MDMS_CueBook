@@ -686,6 +686,85 @@ CueBookをご利用いただきありがとうございます。
   images: []
 };
 
+/** A compact two-page scenario used to demonstrate My Scenarios switching. */
+export const DEMO_SCENARIO: Scenario = {
+  id: 'demo-edge-case-cannot-be-swept',
+  title: 'エッジケースは浚えない',
+  author: 'CueBook Demo',
+  themeColor: '#7c3aed',
+  subThemeColor: '#22d3ee',
+  checklistPosition: 'bottom',
+  masterVolumePosition: 'top',
+  columnLayoutMode: 'auto',
+  uiScaleMode: 'medium',
+  popupTimerPosition: 'top-right',
+  phases: [
+    {
+      id: 'demo-p1',
+      name: 'P1. シナリオ概要とGM注意事項',
+      description: 'SF近未来マーダーミステリー。GM向けの概要と演出メモ。',
+      script: '',
+      themeColor: '#7c3aed',
+      scriptBlocks: [{ id: 'demo-p1-block', type: 'markdown', content: `# 『エッジケースは浚えない』\n\n## シナリオ概要\nジャンル：SF近未来マーダーミステリー\n\nプレイ人数：7人（GM必須）\n\n想定プレイ時間：約150分〜180分\n\n舞台設定：土星衛星軌道上の完全自動化・量子AI研究ステーション『プロメテウス-7』\n\n人類初の自律進化型AI「アイリス」の負荷テスト最終日。軌道影（シャドウ・ゾーン）に入ったステーションで、プロジェクト責任者Dr. アシュレイが脳波接続ポッド内で死亡した。ログに残るのは「未知の変調データを受信」の一文だけ。外部侵入の形跡がない密室で、残された7人がAIの暴走か殺意かを探る。\n\n## GMへの注意事項\n限られた空気と処理能力のカウントダウンを、CueBookの同期タイマーと残り1分未満の緊急パルス・振動で演出する。フェーズ移行時のSE、終盤のBGM切り替えはAudioServiceのプリセットを使用する。画像番号ショートカット（1〜9）でモニターや異常アラートを子画面へ投影し、タイマー文字色と中間レイヤーを事前設定する。ハンドアウト確認時間は10〜15分確保し、犯人以外にも「事故の隠蔽」「不正アクセスの露呈回避」などの秘密の目的があることを意識する。` }],
+      checklists: ['タイマーと緊急演出を確認する', 'ハンドアウト確認時間を確保する'],
+      timers: [{ id: 'demo-p1-timer', label: 'GM準備', durationMinutes: 10 }],
+      recommendedSounds: [], targetDurationMinutes: 10, bufferDurationMinutes: 2
+    },
+    {
+      id: 'demo-p2',
+      name: 'P2. プレイヤー導入とキャラクター',
+      description: 'プレイヤー向け導入文と7名のプレイヤーキャラクター。',
+      script: '',
+      themeColor: '#22d3ee',
+      scriptBlocks: [{ id: 'demo-p2-block', type: 'markdown', content: `# プレイヤー向け導入文\n\n西暦2098年、火星衛星軌道ステーション『プロメテウス-7』。警告音が金属壁に反響する。AI『アイリス』の最終稼働試験中、生体接続ポッドからプロジェクト責任者アシュレイの遺体が発見された。ステーションはシャドウ・ゾーンを航行中で、救助到着は3時間後。酸素と計算資源が削られる暗闇のなか、この中に確率の網目をすり抜けて殺意を遂行した「誰か」がいる。\n\n## プレイヤーキャラクター（7名）\n- Dr. ヴァーノン（Vernon）：男性・50代／量子AIアーキテクト（副責任者）\n- ヘイズ船長（Hayes）：女性・40代／ステーション統括司令官\n- Dr. クララ（Clara）：女性・30代／生体データ・脳波医学管理官\n- リンゼイ（Lindsay）：無性・20代／データアナリスト・通信技師\n- ザック（Zack）：男性・30代／インフラ・動力系エンジニア\n- ソル（Sol）：無性・30代／倫理監察官\n- ドウシン（Dou-shin）：ウォーカロン／セキュリティオフィサ` }],
+      checklists: ['導入文を読み上げる', '7名へキャラクターを割り当てる'],
+      timers: [{ id: 'demo-p2-timer', label: 'プレイヤー導入', durationMinutes: 15 }],
+      recommendedSounds: [], targetDurationMinutes: 15, bufferDurationMinutes: 2
+    }
+  ],
+  sounds: [], images: [], playerImages: [], characters: [
+    { id: 'demo-vernon', name: 'Dr. ヴァーノン', role: CharacterType.PC, comment: '量子AIアーキテクト（副責任者）', tokens: 0, flags: [] },
+    { id: 'demo-hayes', name: 'ヘイズ船長', role: CharacterType.PC, comment: 'ステーション統括司令官', tokens: 0, flags: [] },
+    { id: 'demo-clara', name: 'Dr. クララ', role: CharacterType.PC, comment: '生体データ・脳波医学管理官', tokens: 0, flags: [] },
+    { id: 'demo-lindsay', name: 'リンゼイ', role: CharacterType.PC, comment: 'データアナリスト・通信技師', tokens: 0, flags: [] },
+    { id: 'demo-zack', name: 'ザック', role: CharacterType.PC, comment: 'インフラ・動力系エンジニア', tokens: 0, flags: [] },
+    { id: 'demo-sol', name: 'ソル', role: CharacterType.PC, comment: '倫理監察官', tokens: 0, flags: [] },
+    { id: 'demo-doushin', name: 'ドウシン', role: CharacterType.PC, comment: 'ウォーカロン／セキュリティオフィサ', tokens: 0, flags: [] }
+  ]
+};
+
+/** A compact two-page Japanese horror scenario for My Scenarios switching demos. */
+export const DEMO_DARUMA_SCENARIO: Scenario = {
+  id: 'demo-daruma-san-ga-koroshita',
+  title: 'だるまさんがコロシタ',
+  author: 'CueBook Demo',
+  themeColor: '#991b1b',
+  subThemeColor: '#f59e0b',
+  checklistPosition: 'bottom',
+  masterVolumePosition: 'top',
+  columnLayoutMode: 'auto',
+  uiScaleMode: 'medium',
+  popupTimerPosition: 'top-right',
+  phases: [
+    {
+      id: 'demo-daruma-p1', name: 'P1. 概要とGM注意事項', description: 'クローズド和風ホラー／呪詛×童歌ミステリー。', script: '', themeColor: '#991b1b',
+      scriptBlocks: [{ id: 'demo-daruma-p1-block', type: 'markdown', content: `# 『だるまさんがコロシタ』\n\n## シナリオ概要\n鬼がふりむく。首が落ちる。\n\nジャンル：クローズド和風ホラー／呪詛×童歌ミステリー\nプレイ人数：5人（GM必須）／プレイ時間：約120分（CueBook演出込み）\n\n山深い旧家・達磨家に伝わる神事《鬼遊び》。「だ・る・ま・さ・ん・が・こ・ろ・し・た」と響く10秒の数え歌の中、本家当主が首を切断された状態で発見される。完全な密室で、凶器は血塗られた赤達磨の体内に収められていた。5人は童歌の呪いと人間の意図が絡み合う真相を暴く。\n\n## GMへの注意事項・CueBook演出\n残り1分で緊急パルス・振動を有効化し、「鬼が近づく」焦燥感を演出する。議論の中間推理前などに画像キー1〜5で赤達磨の目が片方ずつ開く映像を投影する。BGMは風鳴り・虫・遠い鈴など静寂を活かした和風環境音、事件発覚時は重低音SEを使う。身体損壊・怪異・流血表現、ジャンプスケアの有無を事前説明し、プレイヤーの同意を得る。` }],
+      checklists: ['ホラー表現と安全配慮を説明する', 'タイマー・画像・SE演出を準備する'], timers: [{ id: 'demo-daruma-p1-timer', label: '鬼遊び準備', durationMinutes: 10 }], recommendedSounds: [], targetDurationMinutes: 10, bufferDurationMinutes: 2
+    },
+    {
+      id: 'demo-daruma-p2', name: 'P2. プレイヤー導入とPC', description: '赤眼の儀と5名のプレイヤーキャラクター。', script: '', themeColor: '#f59e0b',
+      scriptBlocks: [{ id: 'demo-daruma-p2-block', type: 'markdown', content: `# プレイヤー向け導入文\n\n「だ・る・ま・さ・ん・が……こ・ろ・し・た」\n\n三十年に一度の秘祭《赤眼の儀》。達磨家の土蔵で灯火が消え、子供とも老人ともつかぬ声が数え歌を紡いだ。明かりが戻ると、座敷の中央には首を失った当主の胴体と、鮮血で二つ目の穴が塗り潰された大達磨が残されていた。鍵のかかった密室で、鬼遊びは始まっている。次に振り向かれた時、首を落とされるのは誰だ？\n\n## プレイヤーキャラクター（5名）\n- 壱原 鏡介：フリーライター（30歳・男性）／村出身、奇祭を取材するオカルト誌記者\n- 弐条 葵：民俗学研究員（28歳・女性）／数え歌の原形を探る理論派\n- 参木 蓮：達磨家分家筋・神社跡取り（29歳・男性）／次の家督継承者候補\n- 四王司 汐：写真家（27歳・女性）／旧家の建築を撮影する寡黙な人物\n- 吾妻 陸：都市伝説系配信者（26歳・男性）／「達磨村の呪い」を潜入取材する青年` }],
+      checklists: ['導入文を読み上げる', '5名へPCを割り当てる'], timers: [{ id: 'demo-daruma-p2-timer', label: '赤眼の儀', durationMinutes: 15 }], recommendedSounds: [], targetDurationMinutes: 15, bufferDurationMinutes: 2
+    }
+  ], sounds: [], images: [], playerImages: [], characters: [
+    { id: 'demo-daruma-kyo', name: '壱原 鏡介', role: CharacterType.PC, comment: 'フリーライター', tokens: 0, flags: [] },
+    { id: 'demo-daruma-aoi', name: '弐条 葵', role: CharacterType.PC, comment: '民俗学研究員', tokens: 0, flags: [] },
+    { id: 'demo-daruma-ren', name: '参木 蓮', role: CharacterType.PC, comment: '達磨家分家筋・神社跡取り', tokens: 0, flags: [] },
+    { id: 'demo-daruma-shio', name: '四王司 汐', role: CharacterType.PC, comment: '写真家', tokens: 0, flags: [] },
+    { id: 'demo-daruma-riku', name: '吾妻 陸', role: CharacterType.PC, comment: '都市伝説系配信者', tokens: 0, flags: [] }
+  ]
+};
+
 export const BLANK_SCENARIO: Scenario = {
   id: 'cuebook-blank',
   title: '新規シナリオ (Blank)',

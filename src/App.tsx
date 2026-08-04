@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { INITIAL_SCENARIO, BLANK_SCENARIO } from './constants';
+import { INITIAL_SCENARIO, BLANK_SCENARIO, DEMO_SCENARIO, DEMO_DARUMA_SCENARIO } from './constants';
 import { audioService } from './services/AudioService';
 import { storageService, ScenarioSessionSnapshot } from './services/StorageService';
 import { syncService, TimerSyncData } from './services/SyncService';
@@ -607,8 +607,11 @@ function App() {
     if (!isReady) return;
     try {
       const keys = await storageService.listScenarioKeys();
+      for (const demoScenario of [DEMO_SCENARIO, DEMO_DARUMA_SCENARIO]) {
+        if (!keys.includes(demoScenario.id)) await storageService.saveScenario(demoScenario.id, demoScenario);
+      }
       const localEntries = new Map<string, ScenarioRegistryEntry>();
-      for (const key of keys) {
+      for (const key of [...keys, DEMO_SCENARIO.id, DEMO_DARUMA_SCENARIO.id]) {
         if (key === 'gm_accomplice_scenario') continue;
         const localScenario = await storageService.loadScenario(key);
         if (!localScenario?.id) continue;

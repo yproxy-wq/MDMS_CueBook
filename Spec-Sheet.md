@@ -15,6 +15,11 @@
   - 画面切替はHistory APIでURLと同期し、ブラウザの戻る／進むおよび各パスへの直接アクセスから同じモードを復元する。
 - **Firebase設定**: デプロイ時は `VITE_FIREBASE_*` 環境変数を優先し、`firebase-applet-config.json` はAI Studio・ローカル実行用の公開Web SDK設定フォールバックとして使用する。サービスアカウント鍵などの秘密情報はリポジトリに保存しない。
 
+### デフォルトデモシナリオ
+- `DEMO_SCENARIO`（ID: `demo-edge-case-cannot-be-swept`）を初回のシナリオ台帳更新時にIndexedDBへ登録する。
+- 2フェーズ（概要・GM注意事項／プレイヤー導入・キャラクター）と7名のPCを持ち、「マイシナリオ」の切り替えデモに使用する。
+- `DEMO_DARUMA_SCENARIO`（ID: `demo-daruma-san-ga-koroshita`）も同様に初回登録し、2フェーズと5名のPCを持つ。
+
 ---
 
 ## 2. 主要機能一覧 (Feature List)
@@ -179,6 +184,10 @@
 ---
 
 ## 4. プロジェクト構成ガイドライン (Project File Map)
+- `portal/`: 既存のCueBookアプリとは分離した、利用者向けポータルサイト。`index.html`、`styles.css`、`tokens.css`、`main.js` と `assets/` を自己完結で保持し、CueBookの同期機能・Stable版導線・マニュアル導線を紹介する。既存の `src/` ビルドには含めない。
+- `portal/assets/cuebook-concept-02.png`: ポータルのヒーロー背景に使うConcept 02（RUN / EDIT / SYNC、ワイヤレス子ウィンドウ、大型液晶／プロジェクター出力）の提供デザイン。
+- `portal/assets/cuebook-sync-reference.png`: 旧ヒーロー背景の参照素材。現行ヒーローでは使用しない。
+- `portal/assets/cuebook-logo.png` / `portal/assets/nib.png`: ポータル用の暫定CueBookロゴとペン先装飾素材。
 - `src/App.tsx`: アプリケーションのメインエントリーポイント・レイアウトオーケストレーター
 - `src/components/Header.tsx`: マスターUI、タイマー表示、全般メニュー、ショートカットボタン
 - `src/components/EditorView.tsx`: シナリオエディタ親コンポーネント（Saved トースト、タブ切替）
