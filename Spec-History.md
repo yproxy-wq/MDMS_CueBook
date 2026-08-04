@@ -8,6 +8,9 @@
 
 ## 変更履歴一覧 (Change History)
 
+### [2026-08-05] v0.98-dev - デモ台本の書式・見出しを整備
+- 2本のデモシナリオへGM台本／読み上げラベル、H1〜H3見出し、太字、箇条書き、番号付き演出手順、引用ブロック、PC表を追加。
+
 ### [2026-08-05] v0.98-dev - 和風ホラーデモシナリオ追加
 - `src/constants.ts` に『だるまさんがコロシタ』の2ページ・2フェーズ構成と5名のPCを追加。
 - 初回のマイシナリオ台帳更新時にIndexedDBへ自動登録し、既存デモとの切り替えを可能にした。
@@ -20,6 +23,9 @@
 ### [2026-08-05] portal.2 - Concept 02デザインへ変更
 - **ヒーロー背景 (`portal/assets/cuebook-concept-02.png`)**: 提供されたConcept 02を現行ビジュアルとして採用。RUN / EDIT / SYNC、ワイヤレス子ウィンドウ、大型液晶／プロジェクター出力を中心に見せる構成へ更新。
 - **表示ラベル (`portal/index.html`)**: 同期デバイス表記を `01 / RUN`、`02 / EDIT`、`03 / SYNC`、`LARGE LCD / PROJECTOR` へ変更。
+
+### [2026-08-05] portal.3 - ポータルページ本体を削除
+- **削除 (`portal/index.html`, `portal/styles.css`)**: ユーザー指示により、ポータルのIndexとスタイルシートを削除。ロゴ・ペン先・Concept 02画像、トークン、スクリプト、READMEは保持する。
 
 ### [2026-08-04] v0.98-dev.3 - `.cuebook` ZIPインポートの修正
 - **インポート (`App.tsx`)**: `.cuebook`エクスポートがZIPコンテナであることを考慮し、JSONとして直接解析して`Unexpected token 'P'`になる不具合を修正。ZIP／CUEBOOK／JSONを同じ検証済みパーサーで処理する。

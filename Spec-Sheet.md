@@ -19,6 +19,7 @@
 - `DEMO_SCENARIO`（ID: `demo-edge-case-cannot-be-swept`）を初回のシナリオ台帳更新時にIndexedDBへ登録する。
 - 2フェーズ（概要・GM注意事項／プレイヤー導入・キャラクター）と7名のPCを持ち、「マイシナリオ」の切り替えデモに使用する。
 - `DEMO_DARUMA_SCENARIO`（ID: `demo-daruma-san-ga-koroshita`）も同様に初回登録し、2フェーズと5名のPCを持つ。
+- 両デモ台本はMarkdownの見出し（H1〜H3）、太字、箇条書き、番号付き手順、引用ブロック、キャラクター表を初期書式として保持する。
 
 ---
 
@@ -184,7 +185,7 @@
 ---
 
 ## 4. プロジェクト構成ガイドライン (Project File Map)
-- `portal/`: 既存のCueBookアプリとは分離した、利用者向けポータルサイト。`index.html`、`styles.css`、`tokens.css`、`main.js` と `assets/` を自己完結で保持し、CueBookの同期機能・Stable版導線・マニュアル導線を紹介する。既存の `src/` ビルドには含めない。
+- `portal/`: 既存のCueBookアプリとは分離した、利用者向けポータルの素材・トークン・スクリプト置き場。ポータルのページ本体は削除済みで、現時点では `tokens.css`、`main.js`、`README.md` と `assets/` を保持する。既存の `src/` ビルドには含めない。
 - `portal/assets/cuebook-concept-02.png`: ポータルのヒーロー背景に使うConcept 02（RUN / EDIT / SYNC、ワイヤレス子ウィンドウ、大型液晶／プロジェクター出力）の提供デザイン。
 - `portal/assets/cuebook-sync-reference.png`: 旧ヒーロー背景の参照素材。現行ヒーローでは使用しない。
 - `portal/assets/cuebook-logo.png` / `portal/assets/nib.png`: ポータル用の暫定CueBookロゴとペン先装飾素材。
