@@ -23,6 +23,7 @@
     "lucide-react": "^0.563.0",
     "marked": "^12.0.0",
     "motion": "^12.38.0",
+    "pdfjs-dist": "^6.2.108",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

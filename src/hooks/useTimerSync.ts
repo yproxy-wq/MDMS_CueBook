@@ -6,6 +6,7 @@ import { syncService, TimerSyncData } from '../services/SyncService';
 import { isQuotaExceeded } from '../lib/firebase';
 import { findSyncMediaResource, transformDropboxUrl } from '../utils/mediaHelper';
 import { createTimerSessionId, isSecureShareId } from '../utils/syncHelper';
+import { getPdfPageStateKey } from '../utils/pdfAssetHelper';
 
 interface LastSyncTracker {
   time: number;
@@ -31,6 +32,8 @@ interface LastSyncTracker {
   lapBandSize?: 'small' | 'medium' | 'large';
   lapFontSize?: 'small' | 'medium' | 'large';
   timerLabelText?: string;
+  pdfAssetId?: string | null;
+  pdfPage?: number | null;
 }
 
 const lastSyncCache: Record<string, LastSyncTracker> = {};
@@ -93,8 +96,10 @@ export function useTimerSync(
       timerColor: 'white' as 'black' | 'white',
       lapBandSize: 'medium' as 'small' | 'medium' | 'large',
       lapFontSize: 'medium' as 'small' | 'medium' | 'large',
-      timerLabelText: '',
-      lapTexts: {},
+       timerLabelText: '',
+       pdfAssetId: null,
+       pdfPage: null,
+       lapTexts: {},
     };
     const now = Date.now();
     const timeSinceLastSync = now - lastSync.time;
@@ -105,6 +110,11 @@ export function useTimerSync(
     const secondsDiff = Math.abs(timerState.seconds - lastSync.seconds);
     const currentImageId = state.syncConfig ? state.syncConfig.activeImageId : state.activeImageId;
     const normalizedActiveImageId = currentImageId ? String(currentImageId).trim() : null;
+    const currentMediaItem = findSyncMediaResource(state.currentScenario, normalizedActiveImageId);
+    const currentPdfPage = currentMediaItem?.type === 'pdf'
+      ? (state.pdfPageStates?.[getPdfPageStateKey(currentMediaItem)] || 1)
+      : null;
+    const currentPdfAssetId = currentMediaItem?.type === 'pdf' ? currentMediaItem.assetId || null : null;
     
     // Setup and evaluate current UI configurations locally
     const currentSyncTimerEnabled = state.syncConfig?.timerEnabled ?? true;
@@ -148,8 +158,10 @@ export function useTimerSync(
       currentTimerColor !== lastSync.timerColor ||
       currentLapBandSize !== lastSync.lapBandSize ||
       currentLapFontSize !== lastSync.lapFontSize ||
-      currentTimerLabelText !== lastSync.timerLabelText ||
-      lapTimesChanged ||
+       currentTimerLabelText !== lastSync.timerLabelText ||
+       currentPdfAssetId !== lastSync.pdfAssetId ||
+       currentPdfPage !== lastSync.pdfPage ||
+       lapTimesChanged ||
       lapTextsChanged;
 
     const hasStatusChanged = 
@@ -186,7 +198,7 @@ export function useTimerSync(
     // If the data we're about to send is identical to what's already on the server, skip it.
     const remoteData = syncData || ({} as Partial<TimerSyncData>);
 
-    const mediaItem = findSyncMediaResource(state.currentScenario, normalizedActiveImageId);
+    const mediaItem = currentMediaItem;
 
     const prepareDataToSync = (): TimerSyncData => ({
       scenarioId: state.currentScenario.id,
@@ -197,10 +209,12 @@ export function useTimerSync(
       startTime: timerState.startTime || null,
       label: activeTimer.label || null,
       activeImageId: normalizedActiveImageId,
-      activeImageUrl: mediaItem?.url ? transformDropboxUrl(mediaItem.url) : null,
+      activeImageUrl: mediaItem?.assetId ? null : (mediaItem?.url ? transformDropboxUrl(mediaItem.url) : null),
       activeImageName: mediaItem?.name || null,
       activeResourceType: mediaItem?.type || (normalizedActiveImageId ? 'image' : null),
-      pdfPage: mediaItem?.type === 'pdf' ? (state.pdfPageStates?.[mediaItem.url] || 1) : null,
+      pdfPage: currentPdfPage,
+      pdfAssetId: currentPdfAssetId,
+      pdfPageCount: mediaItem?.type === 'pdf' ? mediaItem.pageCount || null : null,
       syncTimerEnabled: currentSyncTimerEnabled,
       syncContentEnabled: currentSyncContentEnabled,
       timerSize: currentTimerSize,
@@ -259,8 +273,11 @@ export function useTimerSync(
       const lapTextsMatched = localLapTextsStr === remoteLapTextsStr;
 
       return scenarioMatched && phaseMatched && timerMatched && runningMatched && timeMatched && 
-             normalize(local.activeImageId) === normalize(remote.activeImageId) &&
-             (local.syncTimerEnabled ?? true) === (remote.syncTimerEnabled ?? true) &&
+              normalize(local.activeImageId) === normalize(remote.activeImageId) &&
+              normalize(local.pdfAssetId) === normalize(remote.pdfAssetId) &&
+              numOrNull(local.pdfPage) === numOrNull(remote.pdfPage) &&
+              numOrNull(local.pdfPageCount) === numOrNull(remote.pdfPageCount) &&
+              (local.syncTimerEnabled ?? true) === (remote.syncTimerEnabled ?? true) &&
              (local.syncContentEnabled ?? true) === (remote.syncContentEnabled ?? true) &&
              (local.timerSize || 'small') === (remote.timerSize || 'small') &&
              (local.timerPosition || 'bottom') === (remote.timerPosition || 'bottom') &&
@@ -317,6 +334,8 @@ export function useTimerSync(
       lapBandSize: currentLapBandSize,
       lapFontSize: currentLapFontSize,
       timerLabelText: currentTimerLabelText,
+      pdfAssetId: currentPdfAssetId,
+      pdfPage: currentPdfPage,
     };
 
     // CRITICAL: Status changes (Start/Stop) or manual timer adjustments should be INSTANT.
@@ -382,10 +401,12 @@ export function useTimerSync(
       startTime: timerState.startTime || null,
       label: activeTimer.label || null,
       activeImageId: normalizedActiveImageId,
-      activeImageUrl: mediaItem?.url ? transformDropboxUrl(mediaItem.url) : null,
+      activeImageUrl: mediaItem?.assetId ? null : (mediaItem?.url ? transformDropboxUrl(mediaItem.url) : null),
       activeImageName: mediaItem?.name || null,
       activeResourceType: mediaItem?.type || (normalizedActiveImageId ? 'image' : null),
-      pdfPage: mediaItem?.type === 'pdf' ? (state.pdfPageStates?.[mediaItem.url] || 1) : null,
+      pdfPage: mediaItem?.type === 'pdf' ? (state.pdfPageStates?.[getPdfPageStateKey(mediaItem)] || 1) : null,
+      pdfAssetId: mediaItem?.type === 'pdf' ? mediaItem.assetId || null : null,
+      pdfPageCount: mediaItem?.type === 'pdf' ? mediaItem.pageCount || null : null,
       syncTimerEnabled: state.syncConfig?.timerEnabled ?? (syncData?.syncTimerEnabled ?? true),
       syncContentEnabled: state.syncConfig?.contentEnabled ?? (syncData?.syncContentEnabled ?? true),
       timerSize: state.syncConfig?.timerSize || syncData?.timerSize || 'small',

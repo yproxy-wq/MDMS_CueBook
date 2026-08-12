@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { syncService, TimerSyncData } from '../services/SyncService';
-import { Clock, AlertTriangle, Loader2, Maximize2, RotateCcw, Video, FolderOpen, Film, Trash2 } from 'lucide-react';
+import { Clock, AlertTriangle, Loader2, Maximize2, RotateCcw, Video, FolderOpen, Film, Trash2, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth } from '../lib/firebase';
 import { audioService } from '../services/AudioService';
@@ -61,6 +61,11 @@ const saveLocalVideosMeta = (map: Record<string, { url: string; name: string }>)
 };
 
 const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }) => {
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [pdfAssetUrl, setPdfAssetUrl] = useState<string | null>(null);
+  const [pdfAssetError, setPdfAssetError] = useState<string | null>(null);
+  const [pdfAssetLoading, setPdfAssetLoading] = useState(false);
+  const [pdfAssetRefreshNonce, setPdfAssetRefreshNonce] = useState(0);
   const [data, setData] = useState<TimerSyncData | null>(null);
   const [loading, setLoading] = useState(true);
   const [displaySeconds, setDisplaySeconds] = useState(0);
@@ -160,6 +165,7 @@ const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }
 
   // Local Video Registry to avoid Firestore 1MB limits
   const [localVideoMap, setLocalVideoMap] = useState<Record<string, { url: string; name: string }>>({});
+  const [localPdfMap, setLocalPdfMap] = useState<Record<string, { url: string; name: string }>>({});
   const [showMapPanel, setShowMapPanel] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -199,6 +205,14 @@ const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }
     return data.activeImageUrl || '';
   }, [data, localVideoMap]);
 
+  const getActivePdfSrc = useCallback(() => {
+    if (!data || data.activeResourceType !== 'pdf') return '';
+    const idKey = data.activeImageId ? String(data.activeImageId).toLowerCase() : '';
+    const nameKey = data.activeImageName ? String(data.activeImageName).toLowerCase() : '';
+    const cleanNameKey = nameKey.replace(/\.[^/.]+$/, '');
+    return localPdfMap[idKey]?.url || localPdfMap[nameKey]?.url || localPdfMap[cleanNameKey]?.url || data.activeImageUrl || '';
+  }, [data, localPdfMap]);
+
   const processFiles = useCallback((files: FileList) => {
     const newMappings: Record<string, { url: string; name: string }> = {};
     Array.from(files).forEach(file => {
@@ -233,6 +247,23 @@ const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }
       saveLocalVideosMeta(next);
       return next;
     });
+  }, []);
+
+  const processPdfFiles = useCallback((files: FileList) => {
+    const mappings: Record<string, { url: string; name: string }> = {};
+    Array.from(files).forEach(file => {
+      if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) return;
+      const url = URL.createObjectURL(file);
+      const name = file.name.toLowerCase();
+      const cleanName = file.name.replace(/\.[^/.]+$/, '').toLowerCase();
+      mappings[name] = { url, name: file.name };
+      mappings[cleanName] = { url, name: file.name };
+      const activeName = dataRef.current?.activeImageName?.toLowerCase();
+      if (dataRef.current?.activeResourceType === 'pdf' && activeName && (activeName === name || activeName.replace(/\.[^/.]+$/, '') === cleanName) && dataRef.current.activeImageId) {
+        mappings[dataRef.current.activeImageId.toLowerCase()] = { url, name: file.name };
+      }
+    });
+    setLocalPdfMap(prev => ({ ...prev, ...mappings }));
   }, []);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -495,6 +526,70 @@ const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  useEffect(() => {
+    const source = data?.activeResourceType === 'pdf' ? getActivePdfSrc() : null;
+    if (!source?.startsWith('data:application/pdf')) {
+      setPdfBlobUrl(null);
+      return;
+    }
+    try {
+      const [header, payload] = source.split(',', 2);
+      const mime = header.match(/^data:([^;]+)/)?.[1] || 'application/pdf';
+      const bytes = header.includes(';base64')
+        ? Uint8Array.from(atob(payload), (char) => char.charCodeAt(0))
+        : new TextEncoder().encode(decodeURIComponent(payload));
+      const blobUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
+      setPdfBlobUrl(blobUrl);
+      return () => {
+        URL.revokeObjectURL(blobUrl);
+        setPdfBlobUrl(null);
+      };
+    } catch (error) {
+      console.warn('[PDF] Failed to create local preview URL:', error);
+      setPdfBlobUrl(null);
+    }
+  }, [data?.activeResourceType, getActivePdfSrc]);
+
+  useEffect(() => {
+    const assetId = data?.activeResourceType === 'pdf' ? data.pdfAssetId : null;
+    if (!assetId) {
+      setPdfAssetUrl(null);
+      setPdfAssetError(null);
+      setPdfAssetLoading(false);
+      return;
+    }
+    if (!session.isSecure) {
+      setPdfAssetUrl(null);
+      setPdfAssetError('安全な共有URLで子ウィンドウを開き直してください。');
+      return;
+    }
+
+    let cancelled = false;
+    let refreshTimer: number | undefined;
+    setPdfAssetLoading(true);
+    setPdfAssetError(null);
+    void import('../services/DropboxAssetLinkService')
+      .then(({ getPdfPageTemporaryUrl }) => getPdfPageTemporaryUrl(session.userId, session.subSessionId, assetId, data?.pdfPage || 1))
+      .then((result) => {
+        if (cancelled) return;
+        setPdfAssetUrl(result.url);
+        setPdfAssetLoading(false);
+        refreshTimer = window.setTimeout(() => setPdfAssetRefreshNonce((value) => value + 1), Math.max(60_000, result.expiresInSeconds * 1000 - 5 * 60_000));
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.warn('[PDF asset] Failed to obtain a temporary page URL:', error);
+        setPdfAssetUrl(null);
+        setPdfAssetError('PDFページを取得できません。共有URLまたはDropbox接続を確認してください。');
+        setPdfAssetLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+    };
+  }, [data?.activeResourceType, data?.pdfAssetId, data?.pdfPage, pdfAssetRefreshNonce, session.isSecure, session.subSessionId, session.userId]);
+
   if (loading) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#050505] text-white">
@@ -515,8 +610,9 @@ const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }
   }
 
   const videoSrc = getActiveVideoSrc();
+  const pdfSrc = getActivePdfSrc();
   const isVideoMissing = data.activeResourceType === 'video' && !videoSrc;
-  const hasImage = !!data.activeImageUrl || (data.activeResourceType === 'video' && !!videoSrc);
+  const hasImage = !!data.activeImageUrl || (data.activeResourceType === 'pdf' && (!!pdfSrc || !!data.pdfAssetId)) || (data.activeResourceType === 'video' && !!videoSrc);
   const timerSize = data.timerSize || 'small';
   const timerPosition = data.timerPosition || 'bottom';
 
@@ -760,7 +856,7 @@ const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }
       {syncContentEnabled && (
         <div className="absolute inset-0 z-0 bg-black">
           <AnimatePresence mode="popLayout">
-            {(data.activeImageUrl || isVideoMissing || (data.activeResourceType === 'video' && videoSrc)) ? (
+            {(data.activeImageUrl || data.activeResourceType === 'pdf' || isVideoMissing || (data.activeResourceType === 'video' && videoSrc)) ? (
                 <motion.div
                   key={data.activeImageUrl || (videoSrc ? 'video-active' : 'video-missing')}
                   initial={{ opacity: 0 }}
@@ -778,16 +874,43 @@ const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }
                     .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
                   `}</style>
                   {data.activeResourceType === 'pdf' ? (
-                    <div className="w-full h-full relative bg-neutral-900">
-                      <iframe 
-                        src={data.activeImageUrl?.startsWith('data:') 
-                          ? `${data.activeImageUrl}#navpanes=0&view=FitH&page=${data.pdfPage || 1}` 
-                          : `https://docs.google.com/viewer?url=${encodeURIComponent(data.activeImageUrl || '')}&embedded=true`} 
-                        className="w-full h-full border-none"
-                        title="Sync PDF Viewer"
-                        key={`${data.activeImageUrl}-${data.pdfPage || 1}`}
-                      />
-                    </div>
+                    data.pdfAssetId ? (
+                      <div className="w-full h-full relative bg-neutral-900 flex items-center justify-center">
+                        {pdfAssetUrl ? (
+                          <img
+                            src={pdfAssetUrl}
+                            alt={data.activeImageName || `PDF ${data.pdfPage || 1}ページ`}
+                            key={`${data.pdfAssetId}-${data.pdfPage || 1}`}
+                            onError={() => {
+                              setPdfAssetUrl(null);
+                              setPdfAssetError('PDFページの表示に失敗しました。GM側でページを切り替えて再取得してください。');
+                            }}
+                            className="w-full h-full"
+                            style={{ objectFit: data.imageFit === 'cover' ? 'cover' : data.imageFit === 'fill' ? 'fill' : 'contain' }}
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center gap-3 text-center p-8">
+                            {pdfAssetLoading ? <Loader2 size={40} className="animate-spin text-sky-400" /> : <FileText size={40} className="text-amber-300" />}
+                            <p className="text-sm text-white/70">{pdfAssetError || `PDFページ ${data.pdfPage || 1} を読み込み中…`}</p>
+                          </div>
+                        )}
+                      </div>
+                    ) : pdfSrc ? (
+                      <div className="w-full h-full relative bg-neutral-900">
+                        <iframe src={pdfBlobUrl ? `${pdfBlobUrl}#navpanes=0&view=Fit&zoom=page-fit&page=${data.pdfPage || 1}` : `${transformDropboxUrl(pdfSrc)}#navpanes=0&view=Fit&zoom=page-fit&page=${data.pdfPage || 1}`} className="w-full h-full border-none" title="Sync PDF Viewer" key={`${pdfSrc}-${data.pdfPage || 1}`} />
+                      </div>
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-[#0a0a0c] text-center p-8">
+                        <FileText size={48} className="text-sky-400" />
+                        <h2 className="text-xl font-bold text-white">ローカルPDFを選択してください</h2>
+                        <p className="text-sm text-white/50 max-w-md">PDF本体が同期サイズを超えたため、子ウィンドウ側で同じPDFを一度だけ選択してください。ページ番号と表示状態は同期されます。</p>
+                        <label className="px-5 py-3 rounded-full bg-sky-600 hover:bg-sky-500 text-white text-sm font-bold cursor-pointer">
+                          <FolderOpen size={16} className="inline mr-2" />PDFを選択
+                          <input type="file" accept="application/pdf,.pdf" className="hidden" onChange={(e) => e.target.files && processPdfFiles(e.target.files)} />
+                        </label>
+                      </div>
+                    )
                   ) : data.activeResourceType === 'video' ? (
                     isVideoMissing ? (
                       <div className="w-full h-full relative bg-[#0a0a0c] flex flex-col items-center justify-center p-8 border-2 border-dashed border-red-500/20 rounded-2xl m-4 max-w-4xl max-h-[80vh] transition-colors hover:border-red-500/40">

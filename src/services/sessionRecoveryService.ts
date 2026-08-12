@@ -2,7 +2,10 @@ import { AppState } from '../types';
 
 const DB_NAME = 'TheMastermindDeckDB';
 const STORE_NAME = 'sessions';
-const DB_VERSION = 2;
+const BINDING_STORE_NAME = 'scenarioBindings';
+// Keep this aligned with StorageService. Opening a lower explicit version than
+// an existing database throws VersionError before onupgradeneeded can recover.
+const DB_VERSION = 3;
 const BACKUP_KEY = 'session_recovery_backup';
 const CLEAN_EXIT_KEY = 'session_recovery_clean_exit';
 
@@ -25,6 +28,10 @@ class SessionRecoveryService {
             db.createObjectStore('sessions');
             console.log(`[IndexedDB/Session] Created object store 'sessions' during upgrade.`);
           }
+          if (!db.objectStoreNames.contains(BINDING_STORE_NAME)) {
+            db.createObjectStore(BINDING_STORE_NAME);
+            console.log(`[IndexedDB/Session] Created object store '${BINDING_STORE_NAME}' during upgrade.`);
+          }
         };
 
         request.onsuccess = (event) => {
@@ -36,12 +43,23 @@ class SessionRecoveryService {
             openDB(nextVersion);
           } else {
             this.db = db;
+            db.onversionchange = () => {
+              db.close();
+              if (this.db === db) this.db = null;
+            };
             resolve(db);
           }
         };
 
         request.onerror = (event) => {
-          reject((event.target as IDBOpenDBRequest).error);
+          const error = (event.target as IDBOpenDBRequest).error;
+          // A previous app version may already have upgraded the shared DB.
+          // Retry without an explicit version to open that current schema.
+          if (version !== undefined && error?.name === 'VersionError') {
+            openDB();
+            return;
+          }
+          reject(error);
         };
       };
 

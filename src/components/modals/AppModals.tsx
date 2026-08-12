@@ -6,7 +6,7 @@ import PerformanceModal from '../PerformanceModal';
 import PerformanceHistoryModal from '../PerformanceHistoryModal';
 import HandoutModal from '../HandoutModal';
 import SyncWindowModal from './SyncWindowModal';
-import { Scenario, Performance, Character, AppState, TimerConfig } from '../../types';
+import { Scenario, Performance, Character, AppState, ImageResource, TimerConfig } from '../../types';
 import { User } from 'firebase/auth';
 
 const DUMMY_PERFORMANCES: Performance[] = [
@@ -84,6 +84,9 @@ interface AppModalsProps {
   onResetTimer: () => void;
   onResetSync: () => void;
   quotaExceeded: boolean;
+  pdfPageStates?: Record<string, number>;
+  onSetPdfPage?: (url: string, page: number) => void;
+  onAddPdfAsset?: (asset: ImageResource) => void;
 }
 
 export const AppModals: React.FC<AppModalsProps> = React.memo(({
@@ -120,6 +123,9 @@ export const AppModals: React.FC<AppModalsProps> = React.memo(({
   onResetTimer,
   onResetSync,
   quotaExceeded,
+  pdfPageStates,
+  onSetPdfPage,
+  onAddPdfAsset,
 }) => {
   return (
     <>
@@ -251,6 +257,10 @@ export const AppModals: React.FC<AppModalsProps> = React.memo(({
           onResetSync={onResetSync}
           availableMedia={currentScenario.playerImages && currentScenario.playerImages.length > 0 ? currentScenario.playerImages : (currentScenario.images || [])}
           quotaExceeded={quotaExceeded}
+          pdfPageStates={pdfPageStates}
+          onSetPdfPage={onSetPdfPage}
+          scenarioId={currentScenario.id}
+          onAddPdfAsset={onAddPdfAsset}
           isLoggedIn={!!user}
           onLogin={() => setShowLoginConfirmation(true)}
         />

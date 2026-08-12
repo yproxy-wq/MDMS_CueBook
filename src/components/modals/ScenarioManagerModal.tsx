@@ -1,8 +1,9 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertTriangle, BookOpen, Check, Copy, Download, Edit3, ExternalLink, FileUp, Info, Keyboard, Layers3, Link2, Loader2, RotateCcw, X } from 'lucide-react';
+import { AlertTriangle, BookOpen, Check, Copy, Download, Edit3, ExternalLink, FileUp, Info, Keyboard, Layers3, Link2, Loader2, Plus, RotateCcw, X } from 'lucide-react';
 import { User } from 'firebase/auth';
-import { ScenarioRegistryEntry } from '../../services/ScenarioRegistryService';
+import type { ScenarioRegistryEntry } from '../../services/ScenarioRegistryService';
+import { MAX_SCENARIO_ENTRIES } from '../../utils/scenarioCatalog';
 
 interface ScenarioManagerModalProps {
   isOpen: boolean;
@@ -115,7 +116,7 @@ const ScenarioManagerModal: React.FC<ScenarioManagerModalProps> = ({
               </div>
               <div className="space-y-2">
                 {entries.length === 0 && <div className="rounded-xl border border-dashed border-white/10 p-7 text-center text-xs text-white/35">登録済みシナリオはありません。</div>}
-                {entries.map((entry, index) => {
+                {entries.slice(0, MAX_SCENARIO_ENTRIES).map((entry, index) => {
                   const status = statusLabel(entry);
                   const current = entry.scenarioId === currentScenarioId;
                   return (
@@ -140,6 +141,17 @@ const ScenarioManagerModal: React.FC<ScenarioManagerModalProps> = ({
                     </div>
                   );
                 })}
+                {onRegister && entries.length < MAX_SCENARIO_ENTRIES && (
+                  <button
+                    onClick={onRegister}
+                    disabled={switching}
+                    className="flex min-h-[58px] w-full items-center justify-center gap-2 rounded-xl border border-dashed border-emerald-400/30 bg-emerald-400/[0.03] px-3 py-3 text-xs font-semibold text-emerald-300 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    title="この端末のシナリオを登録"
+                  >
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-300/40 font-mono text-lg leading-none"><Plus size={16} /></span>
+                    <span>この端末のシナリオを登録</span>
+                  </button>
+                )}
               </div>
             </section>
 

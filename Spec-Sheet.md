@@ -20,6 +20,7 @@
 - 2フェーズ（概要・GM注意事項／プレイヤー導入・キャラクター）と7名のPCを持ち、「マイシナリオ」の切り替えデモに使用する。
 - `DEMO_DARUMA_SCENARIO`（ID: `demo-daruma-san-ga-koroshita`）も同様に初回登録し、2フェーズと5名のPCを持つ。
 - 両デモ台本はMarkdownの見出し（H1〜H3）、太字、箇条書き、番号付き手順、引用ブロック、キャラクター表を初期書式として保持する。
+- マイシナリオ台帳の表示上限は16件。シナリオ一覧末尾に、現在端末のシナリオを登録する「＋」ボタンを表示する。
 
 ---
 
@@ -34,7 +35,20 @@
    - 登録された共有画像/メディアに自動的に順番番号 (#1, #2, #3...) を付与。
    - 進行画面でキーボードの数字キー `1` 〜 `9` や `]` / `[` / `Ctrl+Alt+I` を押すことで、該当番号の画像を即時に子ウィンドウへ投影。
    - **画像セット連動設定 (v1.07)**: 各画像に「タイマー文字色（黒系/白系）」および「中間レイヤー（黒/白/なし）」を個別のセットとして保存保持。画像の選択・キー切り替え時に該当設定がアトミックに適用・同期される。
-   - Sync Studioの番号表示とショートカットは同じ順序付きメディア一覧を使用する。プレイヤー共有画像が存在する場合はそれを優先し、存在しない場合のみ通常画像／ローカル映像へフォールバックする。
+    - Sync Studioの番号表示とショートカットは同じ順序付きメディア一覧を使用する。プレイヤー共有画像が存在する場合はそれを優先し、存在しない場合のみ通常画像／ローカル映像へフォールバックする。
+    - **PDFページ単位投影**: PDFメディアは `pdfPage` をFirestore同期し、子ウィンドウのタイマー下層へ指定ページを1ページ単位・ページフィットで表示する。ローカル/Data URLは子ウィンドウ内でBlob URLへ変換して表示し、外部URLはGoogle PDF Viewerのページ指定を使用する。
+    - PDF表示中は画像切替と同じ `[` / `]` で前後ページ、数字キー `1`〜`9` でページ番号を直接指定する。
+    - Sync StudioのPDF選択時は、設定画面のページ番号入力から任意ページを直接表示・同期できる。
+    - PDF本体がFirestore同期上限を超えた場合、子ウィンドウ側で動画と同様にローカルPDFを再選択して表示できる。
+    - Sync StudioではPDF解析後にページ番号一覧を表示し、ページボタンのクリックで指定ページを即時同期する。解析失敗時はページ入力と子ウィンドウ側再選択を利用できる。
+    - 公開Dropbox PDFは本体を同期せず、変換済みURL文字列のみを同期し、子ウィンドウのPDFビューアで直接取得する。
+    - PDFページ画像アセットは、PDFのSHA-256由来の世代IDで管理し、Firestoreへはメタデータのみを保存する。変換画像は1ページずつBlobとして保存先へ渡し、全ページをメモリ・Firestoreへ保持しない。
+    - Dropbox App folder連携はFirebase Functionsを経由する。OAuthトークンは暗号化してFunctions専用領域に保持し、フロントエンド・子ウィンドウ・Firestore共有セッションへ平文トークンや恒久URLを送らない。
+    - ブラウザから呼ぶCallable FunctionsはCloud Runの入口を`public`に設定し、関数内のFirebase Authentication検証で所有者を必ず認可する。子ウィンドウの短期URL発行のみ、共有capabilityを追加の認可境界とする。
+    - OAuthコールバックは`state`と認可コードの存在を先に検証し、不正または期限切れのリクエストをHTTP 400で拒否する。
+    - Dropboxトークン交換の失敗時は、認可コード・App Secretをログ出力せず、DropboxのHTTP状態とエラー種別だけをFunctionsログへ残して設定不備を診断可能にする。
+    - Sync StudioからDropbox認可ポップアップを開き、ローカルPDFをページごとにWebP化してDropbox App folderへ直接アップロードできる。生成済みアセットはプレイヤー共有メディアとして追加され、ページ番号一覧・数字キー・`[` / `]`で切り替える。
+    - 子ウィンドウは`pdfAssetId`と共有capabilityから1ページ分の短期URLをFunctionsへ要求して表示する。短期URLは有効期限の5分前に再取得し、PDF本体やDropbox認証情報は同期しない。
 3. **高精度同期タイマーエンジン**:
    - `startTime` (基準時刻) に基づくドリフト補正リアルタイムタイマー。
    - Firebase Firestore (`SyncService`) を介した複数端末・子ウィンドウ間での1秒未満精度同期。
@@ -112,13 +126,15 @@
    - Tailwind CSS は `@tailwindcss/vite` と `src/index.css` でビルド時に生成する。
    - `index.html` はTailwind CDNや外部import mapを読み込まず、実行時JIT生成に依存しない。
    - Timer共有画面、Handout共有画面、シナリオ入出力用JSZipは動的importで分割し、通常のGM画面の初期バンドルへ含めない。
+   - Viteの手動チャンクにより、Firebase（Firestore／Auth／共通部）、PDF.js、React系ランタイム、アイコン、Markdown系、および管理モーダル群をアプリ本体から分離し、個別にキャッシュ可能なバンドルとして配信する。
 1. **Firebase Hosting 設定**:
    - `firebase.json` は `dist` を配備し、存在しない任意パスを `/index.html` へ rewrite する SPA 構成。
    - rewrite 前の URL を対象に、アプリシェルは再検証、`/assets/**` はハッシュ付き静的 asset として長期 immutable cache を適用する。
    - `.firebaserc` は AI Studio で使用する Firebase project を default alias として定義する。
    - project aliases は `development` (`cuebook-dev`) と `stable` (`cuebook-stable`) を使用し、default は `development` とする。Bizは店舗ごとに独立した `cuebook-biz-<店舗コード>` プロジェクトを使用し、Workflowの許可リストで配備先を固定する。
    - `npm run build:development` は `.env.development` のFirebase Web設定を使用し、Hostingの `cuebook-dev` と認証・Firestore接続先を一致させる。
-   - Hosting配備では `firestore.rules` も同じFirebase projectへ同時配備する。アプリ本体だけを配備してSecurity Rulesを取り残さない。
+   - Hosting配備では `firestore.rules` とCloud Functionsも同じFirebase projectへ同時配備する。アプリ本体だけを配備してSecurity RulesやDropbox PDF連携のFunctionsを取り残さない。
+   - Dropbox PDFアセット連携用のCloud Functionsは Node.js 22（2nd Gen）で稼働し、`asia-northeast1` のArtifact Registryには1日保持の自動クリーンアップポリシーを設定する。
 2. **配備前品質ゲート**:
    - `npm run verify` は lint、TypeScript 型検査、ユニットテスト、本番 build を順に実行する。
    - 初回および変更配備では Hosting preview channel に対して deep link、認証、同期画面、タイマー、キャッシュ更新を受入確認する。
@@ -200,7 +216,7 @@
 - `src/services/AudioService.ts`: Web Audio API シングルトン管理クラス
 - `src/services/SyncService.ts`: Firebase Firestore リアルタイム同期層
 - `src/services/ScenarioRegistryService.ts`: Googleアカウントのシナリオ台帳、設定同期、fingerprint、端末紐づけ境界
-- `src/services/StorageService.ts`: IndexedDBシナリオ本体、`sessions`、端末別`scenarioBindings`の永続化
+  - `src/services/StorageService.ts` / `src/services/sessionRecoveryService.ts`: 同一のIndexedDBスキーマ世代（v3）で、シナリオ本体、`sessions`、端末別`scenarioBindings`およびセッション復旧を永続化する。
 - `src/hooks/useAppTimer.ts`: 既存タイマー互換の 1 秒表示フック
 - `src/hooks/useDisplayNow.ts` / `src/components/LiveHeader.tsx`: root state を更新せず leaf component と Header wrapper で表示時刻を更新する層
 - `src/index.css` / `vite.config.ts`: Tailwind CSS のビルド時生成とグローバルCSSエントリ

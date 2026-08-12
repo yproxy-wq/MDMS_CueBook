@@ -7,6 +7,9 @@ export interface GlobalShortcutsOptions {
   sounds?: SoundConfig[];
   combinedImages?: MediaItem[];
   activeImageId?: string | null;
+  activePdfUrl?: string | null;
+  activePdfPage?: number;
+  onSetPdfPage?: (page: number) => void;
   isEditorMode?: boolean;
   onSetEditorMode?: (isEditor: boolean) => void;
   onToggleEditorMode?: () => void;
@@ -82,6 +85,12 @@ export function dispatchGlobalShortcut(event: ShortcutEvent, options: GlobalShor
     const digit = event.code.match(/^(?:Digit|Numpad)([1-9])$/) || event.key.match(/^([1-9])$/);
     return digit ? Number.parseInt(digit[1], 10) - 1 : -1;
   };
+  const changePdfPage = (page: number) => {
+    if (!options.activePdfUrl || !options.onSetPdfPage) return false;
+    event.preventDefault();
+    options.onSetPdfPage(Math.max(1, page));
+    return true;
+  };
   const currentIndex = mediaIndexFor(options.activeImageId, media);
   const nextMedia = () => media[(currentIndex >= 0 && currentIndex < media.length - 1) ? currentIndex + 1 : 0];
   const previousMedia = () => media[currentIndex > 0 ? currentIndex - 1 : media.length - 1];
@@ -121,6 +130,7 @@ export function dispatchGlobalShortcut(event: ShortcutEvent, options: GlobalShor
   if (event.ctrlKey || event.altKey || event.metaKey) return false;
 
   const index = directMediaIndex();
+  if (options.activePdfUrl && index >= 0) return changePdfPage(index + 1);
   if (index >= 0 && media[index]) return playMedia(media[index]);
 
   const bgmKey = keyboardShortcuts?.bgmPlayPause || 'm';
@@ -140,11 +150,13 @@ export function dispatchGlobalShortcut(event: ShortcutEvent, options: GlobalShor
   });
   if (matchesKey(event, timerKey)) return consume(options.onToggleTimer);
   if (matchesKey(event, nextKey)) {
+    if (options.activePdfUrl) return changePdfPage((options.activePdfPage || 1) + 1);
     event.preventDefault();
     if (media.length > 0) playMedia(nextMedia());
     return true;
   }
   if (matchesKey(event, previousKey)) {
+    if (options.activePdfUrl) return changePdfPage((options.activePdfPage || 1) - 1);
     event.preventDefault();
     if (media.length > 0) playMedia(previousMedia());
     return true;

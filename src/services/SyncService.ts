@@ -24,6 +24,9 @@ export interface TimerSyncData {
   activeImageName?: string | null;
   activeResourceType?: 'image' | 'pdf' | 'video' | null;
   pdfPage?: number;
+  /** Generated PDF page-image asset. The child view exchanges this ID for a short-lived URL. */
+  pdfAssetId?: string | null;
+  pdfPageCount?: number | null;
   lastUpdated?: any; // eslint-disable-line @typescript-eslint/no-explicit-any
   lapTimes?: number[] | null;
   lapTexts?: Record<number, string> | null;

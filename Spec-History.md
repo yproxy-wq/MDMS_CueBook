@@ -6,6 +6,59 @@
 
 ---
 
+### [2026-08-11] v0.98-dev - マイシナリオ上限16件・追加ボタン
+- マイシナリオ一覧の表示上限を16件に設定。
+- 一覧末尾へ、既存カードと同じ操作感で端末シナリオを登録できる「＋」ボタンを追加。
+- 台帳の上限・整列・アクティブ項目維持を副作用なしの`scenarioCatalog`モジュールへ分離し、境界条件テストを追加。
+- Sync StudioのLint不備を修正し、Firebase／PDF.js／React系を手動チャンクへ分離して初期バンドルの責務を縮小。
+- Dev／Stable配備ワークフローをHosting、Firestore Rules、Dropbox PDF連携Functionsの同時配備へ統一し、Functionsの依存解決とTypeScriptビルドを配備前に必須化。
+
+### [2026-08-07] v0.98-dev - Dropbox PDFアセットFunctionsをDevへ初回配備
+- `cuebook-dev` にDropbox OAuth、PDFページ画像の一時アップロード、検証、子ウィンドウ用一時URL発行の6 Functionsを配備。
+- Cloud Functionsのサポート対象であるNode.js 22へランタイムを更新し、Artifact Registryのデプロイ画像を1日で削除するコスト保護ポリシーを運用対象に追加。
+- OAuthコールバックで`state`または認可コードが欠けるリクエストは、Firestoreへアクセスする前にHTTP 400で拒否し、空の文書パスによるHTTP 500を防止。
+
+### [2026-08-07] v0.98-dev - Sync Studio Dropbox PDFアセット統合
+- Sync StudioにDropbox接続状態、ポップアップOAuth、PDFページ画像化アップロード、進捗・中止・失敗表示を追加。変換時のみPDF.jsを遅延ロードする。
+- PDFアセットはシナリオIDとPDFハッシュから導く世代IDで分離し、同一PDFを別シナリオへ追加しても保存先を上書きしない。
+- `pdfAssetId`、ページ数、ページ番号だけをTimer同期し、子ウィンドウは共有capabilityを提示して1ページ分のDropbox短期URLを取得・期限前更新する。
+
+### [2026-08-07] v0.98-dev - PDFページフィット表示
+- PDFの指定ページを `page-fit` で表示領域いっぱいに合わせ、台本ビューと子ウィンドウの表示条件を統一。
+
+### [2026-08-07] v0.98-dev - PDFページショートカット対応
+- PDF表示中の `[` / `]` による前後ページ移動、数字キー `1`〜`9` によるページ直接指定を追加。
+
+### [2026-08-07] v0.98-dev - アップロードPDFの子ウィンドウ表示修正
+- Data URLのPDFを子ウィンドウ内でBlob URLへ変換し、ブラウザの「プレビューできません」表示を回避。
+
+### [2026-08-07] v0.98-dev - Sync StudioのPDFページ直接指定
+- Sync StudioでPDFを選択した際、ページ番号を直接入力して対象ページを即時表示・同期できるUIを追加。
+
+### [2026-08-07] v0.98-dev - 子ウィンドウ側PDF再選択
+- Firestoreの1MB制限でPDF本体URLが同期されない場合、子ウィンドウ側で動画と同様にローカルPDFを選択して表示できるフォールバックUIを追加。
+
+### [2026-08-07] v0.98-dev - Sync Studio PDFページ一覧
+- `pdfjs-dist`でPDFの総ページ数を取得し、Sync Studioにページ番号一覧を表示。
+- ページボタンのクリックで`pdfPageStates`を更新し、子ウィンドウへ即時同期。
+- CORSや公開設定で解析できない場合は、従来のページ入力と再選択フォールバックを維持。
+
+### [2026-08-07] v0.98-dev - Dropbox PDF URL直接表示
+- 公開Dropbox PDFはFirestoreへPDF本体を送らず、`raw=1`へ変換したURL文字列だけを同期。
+- 子ウィンドウでは外部PDF URLを直接iframeで開き、`page`フラグメントで指定ページを表示。
+
+### [2026-08-07] v0.98-dev - PDFアセット変換基盤の監査修正
+- PDFページ画像化を全ページData URL配列で返す実装から、Blobを1ページずつ保存先へ渡すストリーミング方式へ変更。
+- SHA-256世代ID、キャンセル、画像ピクセル上限、`processing`〜`verifying`の状態定義を追加し、メモリ・Firestore容量を圧迫しない基盤へ修正。
+
+### [2026-08-07] v0.98-dev - Dropbox PDFアセットFunctions基盤
+- Firebase FunctionsにDropbox OAuthコールバック、暗号化トークン保存、PDFページ画像の一時アップロードURL発行、アップロード検証、一時閲覧URL発行を追加。
+- クライアントはPDFを1ページずつWebP化して直接Dropboxへ送信し、Dropboxトークンに触れないサービス層を追加。
+
+### [2026-08-06] v0.98-dev - 子ウィンドウPDFページ表示の補強
+- `TimerShareView.tsx` の外部PDF表示URLにも同期中の `pdfPage` を付与し、GM側で選択したページを子ウィンドウへ反映するよう修正。
+- ローカル/Data URL PDFのページ単位表示とタイマー下層配置は既存実装を継続利用。
+
 ## 変更履歴一覧 (Change History)
 
 ### [2026-08-05] v0.98-dev - デモ台本の書式・見出しを整備
@@ -452,3 +505,9 @@
 - `src/constants.ts` に、2ページ・2フェーズ構成の架空シナリオ『エッジケースは浚えない』を追加。
 - 7名のプレイヤーキャラクター名と役職を初期データへ登録。
 - 初回のシナリオレジストリ更新時にIndexedDBへ自動登録し、マイシナリオ一覧から切り替え可能にした。
+### [2026-08-07] v0.98-dev - Dropbox認可入口と永続化の実行時修正
+- ブラウザから使うDropbox Callable FunctionsをCloud Run IAM入口で`public`に統一し、CORS preflightが到達前に拒否される問題を解消。各所有者操作は従来どおり関数内のFirebase Authenticationで検証する。
+- `sessionRecoveryService` のIndexedDB指定世代を`StorageService`と同じv3へ揃え、既に高い世代のDBを開く際の`VersionError`を回避。古い/新しいスキーマ競合時は現行世代で再オープンし、`scenarioBindings`も復旧DB作成時に準備する。
+- 公開Dropbox PDFへのPDF.jsメタデータ取得を行わず、ページ一覧の代わりにDropbox PDFページ画像化の導線を案内して、既知のCORS失敗リクエストを抑制。
+### [2026-08-08] v0.98-dev - Dropbox OAuthトークン交換の診断性を補強
+- Dropboxトークン交換が失敗した際、認可コードやApp Secretを出力せず、HTTP状態とDropboxのエラー種別だけをCloud Functionsログへ記録するようにした。redirect URI・App Key/Secret・認可コード再利用を安全に識別できる。

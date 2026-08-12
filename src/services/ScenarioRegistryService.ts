@@ -42,6 +42,7 @@ export type ScenarioSettings = Pick<Scenario,
   'scriptFontSize' | 'audioPreferences' | 'syncConfig' | 'keyboardShortcuts' |
   'customShortcuts' | 'branchId'>;
 
+/** The scenario-management UI is intentionally kept to a small, predictable catalog. */
 const SETTINGS_KEYS: (keyof ScenarioSettings)[] = [
   'backgroundImage', 'themeColor', 'subThemeColor', 'checklistPosition',
   'masterVolumePosition', 'editorToolbarPosition', 'columnLayoutMode',

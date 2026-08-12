@@ -1,11 +1,13 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Share, Copy, Check, ExternalLink, Play, Pause, RotateCcw, Monitor, Image as ImageIcon, Clock, Layout, Maximize2, X, HelpCircle } from 'lucide-react';
+import { Share, Copy, Check, ExternalLink, Play, Pause, RotateCcw, Monitor, Image as ImageIcon, Clock, Layout, Maximize2, X, HelpCircle, FileText, Upload, Cloud, Loader2, AlertTriangle } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { SyncConfig, ImageResource } from '../../types';
 import { isConfigDirty } from '../../utils/syncHelper';
+import { transformDropboxUrl } from '../../utils/mediaHelper';
+import { getPdfPageStateKey } from '../../utils/pdfAssetHelper';
 
 interface SyncWindowModalProps {
   isOpen: boolean;
@@ -26,6 +28,10 @@ interface SyncWindowModalProps {
   quotaExceeded?: boolean;
   isLoggedIn?: boolean;
   onLogin?: () => void;
+  pdfPageStates?: Record<string, number>;
+  onSetPdfPage?: (url: string, page: number) => void;
+  scenarioId: string;
+  onAddPdfAsset?: (asset: ImageResource) => void;
 }
 
 // Sub-component for Live Preview to ensure clean updates
@@ -76,18 +82,25 @@ const SyncPreview: React.FC<{
               transition={{ duration: 0.4, ease: "easeInOut" }}
               className="w-full h-full flex items-center justify-center overflow-hidden relative"
             >
-              <img 
-                src={displayMedia.url}
-                alt="Preview"
-                className="w-full h-full pointer-events-none"
-                style={{ 
-                  objectFit: config.imageFit === 'cover' ? 'cover' : (config.imageFit === 'contain' ? 'contain' : 'fill'),
-                  width: config.imageFit === 'width' ? '100%' : (config.imageFit === 'height' ? 'auto' : '100%'),
-                  height: config.imageFit === 'height' ? '100%' : (config.imageFit === 'width' ? 'auto' : '100%'),
-                  margin: 'auto'
-                }}
-                referrerPolicy="no-referrer"
-              />
+              {displayMedia.assetId ? (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-sky-950/40 text-sky-100">
+                  <FileText size={28} className="text-sky-300" />
+                  <span className="text-[8px] font-mono tracking-widest">DROPBOX PDF · {displayMedia.pageCount || '?'} PAGES</span>
+                </div>
+              ) : (
+                <img
+                  src={displayMedia.url}
+                  alt="Preview"
+                  className="w-full h-full pointer-events-none"
+                  style={{
+                    objectFit: config.imageFit === 'cover' ? 'cover' : (config.imageFit === 'contain' ? 'contain' : 'fill'),
+                    width: config.imageFit === 'width' ? '100%' : (config.imageFit === 'height' ? 'auto' : '100%'),
+                    height: config.imageFit === 'height' ? '100%' : (config.imageFit === 'width' ? 'auto' : '100%'),
+                    margin: 'auto'
+                  }}
+                  referrerPolicy="no-referrer"
+                />
+              )}
               {/* Dynamic Live Overlay Preview */}
               {config.overlayType && config.overlayType !== 'none' && (
                 <div 
@@ -203,7 +216,11 @@ const SyncWindowModal: React.FC<SyncWindowModalProps> = ({
   availableMedia = [],
   quotaExceeded = false,
   isLoggedIn = false,
-  onLogin
+  onLogin,
+  pdfPageStates = {},
+  onSetPdfPage,
+  scenarioId,
+  onAddPdfAsset,
 }) => {
   const [copied, setCopied] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
@@ -211,6 +228,15 @@ const SyncWindowModal: React.FC<SyncWindowModalProps> = ({
   // Local draft state for Apply logic
   const [draft, setDraft] = useState<SyncConfig>(syncConfig);
   const [synced, setSynced] = useState(false);
+  const [pdfPageCount, setPdfPageCount] = useState<number | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [dropboxConnected, setDropboxConnected] = useState<boolean | null>(null);
+  const [dropboxMessage, setDropboxMessage] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ stage: string; currentPage: number; pageCount: number } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const uploadAbortRef = React.useRef<AbortController | null>(null);
+  const pdfUploadInputRef = React.useRef<HTMLInputElement>(null);
 
   // Adjusted state during render pattern to keep draft synced with incoming configuration updates
   const [prevSyncConfig, setPrevSyncConfig] = useState(syncConfig);
@@ -220,6 +246,136 @@ const SyncWindowModal: React.FC<SyncWindowModalProps> = ({
   }
 
   const isDirty = isConfigDirty(draft, syncConfig);
+  const selectedMedia = availableMedia.find((media) => String(media.id) === String(draft.activeImageId));
+  const selectedPdfPage = selectedMedia?.type === 'pdf' ? (pdfPageStates[getPdfPageStateKey(selectedMedia)] || 1) : null;
+
+  const refreshDropboxConnection = useCallback(async () => {
+    if (!isLoggedIn) return;
+    try {
+      const { isDropboxConnected } = await import('../../services/DropboxOAuthService');
+      setDropboxConnected(await isDropboxConnected());
+      setDropboxMessage(null);
+    } catch {
+      setDropboxConnected(false);
+      setDropboxMessage('Dropbox接続状態を確認できませんでした。');
+    }
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (!isOpen || !isLoggedIn) {
+      setDropboxConnected(null);
+      return;
+    }
+    void refreshDropboxConnection();
+  }, [isOpen, isLoggedIn, refreshDropboxConnection]);
+
+  const handleConnectDropbox = async () => {
+    if (!isLoggedIn) {
+      onLogin?.();
+      return;
+    }
+    try {
+      const { connectDropbox } = await import('../../services/DropboxOAuthService');
+      await connectDropbox();
+      setDropboxMessage('Dropboxで許可した後、この画面の「接続状態を更新」を押してください。');
+    } catch (error) {
+      setDropboxMessage(error instanceof Error && error.message === 'DROPBOX_POPUP_BLOCKED'
+        ? '認可ポップアップがブロックされました。ブラウザでポップアップを許可してください。'
+        : 'Dropbox認可を開始できませんでした。');
+    }
+  };
+
+  const handlePdfAssetFile = async (file: File | undefined) => {
+    if (!file || !onAddPdfAsset) return;
+    if (!isLoggedIn) {
+      onLogin?.();
+      return;
+    }
+    if (!dropboxConnected) {
+      setUploadError('先にDropboxを接続し、接続状態を更新してください。');
+      return;
+    }
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      setUploadError('PDFファイルを選択してください。');
+      return;
+    }
+
+    const controller = new AbortController();
+    uploadAbortRef.current = controller;
+    setUploadError(null);
+    try {
+      const { uploadPdfAssetToDropbox } = await import('../../services/DropboxPdfAssetService');
+      const result = await uploadPdfAssetToDropbox(scenarioId, file, setUploadProgress, controller.signal);
+      const asset: ImageResource = {
+        id: result.assetId,
+        name: file.name,
+        url: `asset://${result.assetId}`,
+        type: 'pdf',
+        assetId: result.assetId,
+        pageCount: result.pageCount,
+        updatedAt: Date.now(),
+      };
+      onAddPdfAsset(asset);
+      onSetPdfPage?.(getPdfPageStateKey(asset), 1);
+      const nextDraft = { ...draft, activeImageId: asset.id };
+      setDraft(nextDraft);
+      onApplySync(nextDraft);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        console.warn('[PDF asset] Upload failed:', error);
+        setUploadError('PDFの変換またはDropboxへの保存に失敗しました。接続とファイルを確認して再試行してください。');
+      }
+    } finally {
+      uploadAbortRef.current = null;
+      setUploadProgress(null);
+      if (pdfUploadInputRef.current) pdfUploadInputRef.current.value = '';
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadPdfMetadata = async () => {
+      if (selectedMedia?.type !== 'pdf' || !selectedMedia.url) {
+        setPdfPageCount(null);
+        setPdfError(null);
+        return;
+      }
+      if (selectedMedia.assetId) {
+        setPdfPageCount(selectedMedia.pageCount || null);
+        setPdfError(null);
+        setPdfLoading(false);
+        return;
+      }
+      if (/dropbox\.com/i.test(selectedMedia.url)) {
+        setPdfPageCount(null);
+        setPdfError('公開Dropbox PDFはブラウザからページ一覧を取得できません。Dropbox PDFページ画像として追加してください。');
+        setPdfLoading(false);
+        return;
+      }
+      setPdfLoading(true);
+      setPdfError(null);
+      try {
+        const [{ getDocument, GlobalWorkerOptions }, workerModule] = await Promise.all([
+          import('pdfjs-dist'),
+          import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
+        ]);
+        GlobalWorkerOptions.workerSrc = workerModule.default;
+        const loadingTask = getDocument({ url: transformDropboxUrl(selectedMedia.url), disableAutoFetch: true, disableStream: true });
+        const pdf = await loadingTask.promise;
+        if (!cancelled) setPdfPageCount(pdf.numPages);
+        await loadingTask.destroy();
+      } catch {
+        if (!cancelled) {
+          setPdfPageCount(null);
+          setPdfError('ページ一覧を取得できません。Dropboxの公開設定またはCORSを確認してください。');
+        }
+      } finally {
+        if (!cancelled) setPdfLoading(false);
+      }
+    };
+    void loadPdfMetadata();
+    return () => { cancelled = true; };
+  }, [selectedMedia?.type, selectedMedia?.url, selectedMedia?.assetId, selectedMedia?.pageCount]);
   
   // Adjusted state during render pattern to avoid useEffect warnings and cascading renders
   const [displaySeconds, setDisplaySeconds] = useState(timerSeconds);
@@ -785,6 +941,94 @@ const SyncWindowModal: React.FC<SyncWindowModalProps> = ({
                   </button>
                 </div>
 
+                <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.04] p-3 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest text-sky-200">
+                      <Cloud size={13} />
+                      <span>Dropbox PDFページ画像</span>
+                      <span className={`rounded-full border px-1.5 py-0.5 text-[8px] ${dropboxConnected ? 'border-emerald-400/40 bg-emerald-400/10 text-emerald-300' : 'border-white/10 bg-black/20 text-white/40'}`}>
+                        {dropboxConnected ? '接続済み' : '未接続'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button type="button" onClick={() => void refreshDropboxConnection()} disabled={!isLoggedIn} className="rounded-md border border-white/10 bg-black/30 px-2 py-1 text-[8px] font-bold text-white/60 hover:text-white disabled:opacity-40">接続状態を更新</button>
+                      <button type="button" onClick={() => void handleConnectDropbox()} className="rounded-md border border-sky-400/30 bg-sky-500/10 px-2 py-1 text-[8px] font-bold text-sky-200 hover:bg-sky-500/20">Dropboxを接続</button>
+                    </div>
+                  </div>
+                  <p className="text-[9px] leading-relaxed text-white/45">PDFはこの端末で1ページずつWebP化し、あなたのDropbox Appフォルダへ直接保存します。子ウィンドウにはページ画像の短期URLだけが渡ります。</p>
+                  {dropboxMessage && <p className="text-[9px] text-amber-200/80">{dropboxMessage}</p>}
+                  {uploadError && <p className="flex items-center gap-1 text-[9px] text-rose-300"><AlertTriangle size={11} />{uploadError}</p>}
+                  {uploadProgress ? (
+                    <div className="flex items-center justify-between gap-3 rounded-lg bg-black/30 px-2.5 py-2 text-[9px] text-sky-100">
+                      <span className="flex items-center gap-2"><Loader2 size={12} className="animate-spin" />{uploadProgress.stage === 'inspecting' ? 'PDFを確認中' : uploadProgress.stage === 'creating' ? '保存先を準備中' : uploadProgress.stage === 'verifying' ? '保存を確認中' : `ページを変換・送信中 ${uploadProgress.currentPage}/${uploadProgress.pageCount}`}</span>
+                      <button type="button" onClick={() => uploadAbortRef.current?.abort()} className="text-rose-300 hover:text-rose-200">中止</button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => pdfUploadInputRef.current?.click()} disabled={!isLoggedIn || !dropboxConnected} className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-sky-400/30 bg-sky-500/[0.06] px-3 py-2 text-[9px] font-bold text-sky-200 hover:bg-sky-500/[0.14] disabled:cursor-not-allowed disabled:opacity-40">
+                      <Upload size={13} />PDFを追加してページ画像化
+                    </button>
+                  )}
+                  <input ref={pdfUploadInputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={(event) => void handlePdfAssetFile(event.target.files?.[0])} />
+                </div>
+
+                {selectedMedia?.type === 'pdf' && onSetPdfPage && (
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-sky-500/20 bg-sky-500/5 px-3 py-2">
+                    <div className="flex items-center gap-2 text-[9px] font-bold text-sky-300 uppercase tracking-widest">
+                      <FileText size={12} />
+                      <span>PDFページ</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] text-white/30 font-mono">P</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={selectedPdfPage || 1}
+                        onChange={(event) => {
+                          const page = Number.parseInt(event.target.value, 10);
+                          if (Number.isFinite(page) && page >= 1) onSetPdfPage(getPdfPageStateKey(selectedMedia), page);
+                        }}
+                        className="w-16 rounded-md border border-sky-500/30 bg-black/50 px-2 py-1 text-center text-xs font-mono font-bold text-sky-200 outline-none focus:border-sky-400"
+                        aria-label="表示するPDFページ番号"
+                      />
+                      <span className="text-[9px] text-white/30">ページを直接表示</span>
+                    </div>
+                  </div>
+                )}
+
+                {selectedMedia?.type === 'pdf' && onSetPdfPage && (
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-2">
+                    <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-widest">
+                      <span className="text-white/50">ページ一覧</span>
+                      <span className="text-sky-300 font-mono">
+                        {pdfLoading ? '読込中…' : pdfPageCount ? `${pdfPageCount}ページ` : '未取得'}
+                      </span>
+                    </div>
+                    {pdfError ? (
+                      <p className="text-[9px] leading-relaxed text-amber-300/80">{pdfError}</p>
+                    ) : pdfPageCount ? (
+                      <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-32 overflow-y-auto pr-1">
+                        {Array.from({ length: pdfPageCount }, (_, index) => {
+                          const page = index + 1;
+                          const active = page === selectedPdfPage;
+                          return (
+                            <button
+                              key={page}
+                              type="button"
+                              onClick={() => onSetPdfPage(getPdfPageStateKey(selectedMedia), page)}
+                              className={`rounded-md border px-1 py-1.5 text-[10px] font-mono font-bold transition-colors ${active ? 'border-sky-400 bg-sky-500/30 text-white' : 'border-white/10 bg-white/5 text-white/50 hover:border-sky-500/50 hover:text-sky-200'}`}
+                              aria-label={`PDF ${page}ページを表示`}
+                            >
+                              P{page}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-[9px] text-white/30">PDFを解析できた場合、ここにページ番号が表示されます。</p>
+                    )}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 lg:grid-cols-8">
                   {/* None Option */}
                   <button
@@ -856,7 +1100,12 @@ const SyncWindowModal: React.FC<SyncWindowModalProps> = ({
                           </span>
                         </div>
 
-                        {media.url ? (
+                        {media.assetId ? (
+                          <div className="w-full h-full bg-sky-950/50 flex flex-col items-center justify-center gap-1">
+                            <FileText size={20} className="text-sky-300" />
+                            <span className="text-[7px] font-mono text-sky-200">{media.pageCount || '?'} PAGES</span>
+                          </div>
+                        ) : media.url ? (
                           <img 
                             src={media.url} 
                             alt={media.name}

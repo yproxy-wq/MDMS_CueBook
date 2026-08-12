@@ -10,7 +10,7 @@ import PhaseSidebar from './components/PhaseSidebar';
 import PhaseProgressNav from './components/PhaseProgressNav';
 import PhaseCard from './components/PhaseCard';
 import { collection, addDoc, query, deleteDoc, doc, onSnapshot, orderBy } from 'firebase/firestore';
-import { AppState, Character, Performance, Phase, Scenario, ScenarioSnapshot, SoundCluster, SoundConfig, SoundType } from './types';
+import { AppState, Character, ImageResource, Performance, Phase, Scenario, ScenarioSnapshot, SoundCluster, SoundConfig, SoundType } from './types';
 import { db, setOnQuotaExceededListener, handleFirestoreError, OperationType, isQuotaExceeded as checkQuotaInitial } from './lib/firebase';
 import { addSmartSnapshot } from './utils/snapshotHelper';
 import { v4 as uuidv4 } from 'uuid';
@@ -30,6 +30,7 @@ import { NetworkToast } from './components/NetworkToast';
 import { selectSyncMedia, transformDropboxUrl } from './utils/mediaHelper';
 import { createSecureShareId, createTimerSessionId, isSecureShareId } from './utils/syncHelper';
 import { buildAppWindowUrl, getAppWindowMode } from './utils/appRoute';
+import { getPdfPageStateKey } from './utils/pdfAssetHelper';
 
 import { useDisplayNow } from './hooks/useDisplayNow';
 import { useSessionRecovery } from './hooks/useSessionRecovery';
@@ -49,6 +50,7 @@ import {
   readCloudScenarios,
   writeCloudScenario,
 } from './services/ScenarioRegistryService';
+import { limitScenarioCatalogEntries } from './utils/scenarioCatalog';
 import { validateAndMigrateScenario } from './utils/scenarioValidator';
 
 const EditorView = React.lazy(() => import('./components/EditorView'));
@@ -671,7 +673,10 @@ function App() {
           syncConfig: currentCloud.settings?.syncConfig || previous.syncConfig,
         }));
       }
-      setScenarioEntries(Array.from(localEntries.values()).sort((a, b) => a.title.localeCompare(b.title, 'ja')));
+      setScenarioEntries(limitScenarioCatalogEntries(
+        Array.from(localEntries.values()),
+        currentScenarioRef.current.id,
+      ));
     } catch (error) {
       console.error('Scenario registry refresh failed:', error);
     }
@@ -877,6 +882,22 @@ function App() {
     }));
   }, []);
 
+  const handleAddDropboxPdfAsset = useCallback((asset: ImageResource) => {
+    setState((previous) => {
+      const baseMedia = previous.currentScenario.playerImages && previous.currentScenario.playerImages.length > 0
+        ? previous.currentScenario.playerImages
+        : (previous.currentScenario.images || []);
+      const playerImages = [...baseMedia.filter((media) => media.id !== asset.id), asset];
+      return {
+        ...previous,
+        currentScenario: { ...previous.currentScenario, playerImages },
+        activeImageId: asset.id,
+        syncConfig: { ...previous.syncConfig, activeImageId: asset.id },
+        pdfPageStates: { ...(previous.pdfPageStates || {}), [getPdfPageStateKey(asset)]: 1 },
+      };
+    });
+  }, []);
+
   const { 
     handlePhasePreview, 
     handlePhaseTransition, 
@@ -976,12 +997,20 @@ function App() {
   }, [currentPhaseIndex, state.currentScenario.phases, handlePhaseTransition]);
 
   // Global Keyboard Shortcuts Hook
+  const activePdfMedia = state.activeImageId
+    ? combinedImages.find((item) => item.id === state.activeImageId || item.url === state.activeImageId)
+    : undefined;
   useGlobalShortcuts({
     scenario: state.currentScenario,
     keyboardShortcuts: state.currentScenario.keyboardShortcuts,
     sounds: state.currentScenario.sounds,
     combinedImages,
     activeImageId: state.activeImageId,
+    activePdfUrl: activePdfMedia?.type === 'pdf' ? activePdfMedia.url : null,
+    activePdfPage: activePdfMedia?.type === 'pdf' ? (state.pdfPageStates?.[getPdfPageStateKey(activePdfMedia)] || 1) : undefined,
+    onSetPdfPage: activePdfMedia?.type === 'pdf'
+      ? (page) => handleSetPdfPageState(getPdfPageStateKey(activePdfMedia), page)
+      : undefined,
     isEditorMode: state.isEditorMode,
     onSetEditorMode: setEditorMode,
     onToggleEditorMode: toggleEditorMode,
@@ -3341,6 +3370,9 @@ function App() {
         onResetTimer={onResetTimer}
         onResetSync={handleResetSync}
         quotaExceeded={quotaExceeded}
+        pdfPageStates={state.pdfPageStates || EMPTY_PDF_PAGE_STATES}
+        onSetPdfPage={handleSetPdfPageState}
+        onAddPdfAsset={handleAddDropboxPdfAsset}
       />
 
       <PhaseSearchModal 

@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { getFirestore, disableNetwork, enableNetwork } from 'firebase/firestore';
+import { getFunctions } from 'firebase/functions';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { networkMonitor } from '../services/NetworkMonitor';
 import { errorLogger } from '../services/ErrorLogger';
@@ -23,6 +24,7 @@ const firestoreDatabaseId = useRuntimeFirebaseConfig ? runtimeEnv.VITE_FIREBASE_
 const app = getApps().length === 0 ? initializeApp(resolvedFirebaseConfig) : getApp();
 export const auth = getAuth(app);
 export const db = firestoreDatabaseId ? getFirestore(app, firestoreDatabaseId) : getFirestore(app);
+export const functions = getFunctions(app, runtimeEnv.VITE_FIREBASE_FUNCTIONS_REGION || 'asia-northeast1');
 export const googleProvider = new GoogleAuthProvider();
 
 export enum OperationType {

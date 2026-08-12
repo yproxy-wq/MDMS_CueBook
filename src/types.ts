@@ -114,6 +114,9 @@ export interface ImageResource {
   duration?: number;
   timerColor?: 'black' | 'white';
   overlayType?: 'black' | 'white' | 'none';
+  /** Optional page-asset identity for generated PDF page images. */
+  assetId?: string;
+  pageCount?: number;
 }
 
 export type MediaResource = ImageResource;

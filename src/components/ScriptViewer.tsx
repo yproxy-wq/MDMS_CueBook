@@ -114,10 +114,10 @@ const PdfBlock: React.FC<{
   
   const fullUrl = useMemo(() => {
     if (!displayUrl) return null;
-    if (isDataUri) return `${displayUrl}#navpanes=0&view=FitH&page=${page}`;
+    if (isDataUri) return `${displayUrl}#navpanes=0&view=Fit&zoom=page-fit&page=${page}`;
     
     // Dropbox etc
-    return `https://docs.google.com/viewer?url=${encodeURIComponent(displayUrl)}&embedded=true`;
+    return `https://docs.google.com/viewer?url=${encodeURIComponent(displayUrl)}&embedded=true&page=${page}&zoom=page-fit`;
   }, [displayUrl, page, isDataUri]);
 
   return (
