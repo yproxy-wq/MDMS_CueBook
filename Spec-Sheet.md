@@ -133,7 +133,7 @@
    - `.firebaserc` は AI Studio で使用する Firebase project を default alias として定義する。
    - project aliases は `development` (`cuebook-dev`) と `stable` (`cuebook-stable`) を使用し、default は `development` とする。Bizは店舗ごとに独立した `cuebook-biz-<店舗コード>` プロジェクトを使用し、Workflowの許可リストで配備先を固定する。
    - `npm run build:development` は `.env.development` のFirebase Web設定を使用し、Hostingの `cuebook-dev` と認証・Firestore接続先を一致させる。
-   - Hosting配備では `firestore.rules` とCloud Functionsも同じFirebase projectへ同時配備する。アプリ本体だけを配備してSecurity RulesやDropbox PDF連携のFunctionsを取り残さない。
+   - Hosting配備では `firestore.rules` とCloud Functionsも同じFirebase projectへ同時配備する。アプリ本体だけを配備してSecurity RulesやDropbox PDF連携のFunctionsを取り残さない。CIはルート品質ゲートの前にFunctions依存を`npm --prefix functions ci`で解決する。
    - Dropbox PDFアセット連携用のCloud Functionsは Node.js 22（2nd Gen）で稼働し、`asia-northeast1` のArtifact Registryには1日保持の自動クリーンアップポリシーを設定する。
 2. **配備前品質ゲート**:
    - `npm run verify` は lint、TypeScript 型検査、ユニットテスト、本番 build を順に実行する。

@@ -12,6 +12,7 @@
 - 台帳の上限・整列・アクティブ項目維持を副作用なしの`scenarioCatalog`モジュールへ分離し、境界条件テストを追加。
 - Sync StudioのLint不備を修正し、Firebase／PDF.js／React系を手動チャンクへ分離して初期バンドルの責務を縮小。
 - Dev／Stable配備ワークフローをHosting、Firestore Rules、Dropbox PDF連携Functionsの同時配備へ統一し、Functionsの依存解決とTypeScriptビルドを配備前に必須化。
+- Functions依存をルート品質ゲート前にCIへ導入し、Functions SDK型未解決で型検査が停止する配備失敗を修正。
 
 ### [2026-08-07] v0.98-dev - Dropbox PDFアセットFunctionsをDevへ初回配備
 - `cuebook-dev` にDropbox OAuth、PDFページ画像の一時アップロード、検証、子ウィンドウ用一時URL発行の6 Functionsを配備。
