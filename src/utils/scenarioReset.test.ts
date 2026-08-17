@@ -8,8 +8,8 @@ describe('createResetScenarioWithSnapshot', () => {
 
     expect(reset.id).toBe(BLANK_SCENARIO.id);
     expect(reset.snapshots?.[0]).toMatchObject({
-      label: '[auto: before reset] 10:02',
       scenarioData: expect.objectContaining({ id: INITIAL_SCENARIO.id }),
     });
+    expect(reset.snapshots?.[0]?.label).toMatch(/^\[auto: before reset\] \d{2}:\d{2}$/);
   });
 });
