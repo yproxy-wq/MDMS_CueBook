@@ -14,6 +14,7 @@
 - 回帰試験を追加し、lint、TypeScript型検査、ユニットテスト、本番ビルドで確認する。
 - Devの通常配備をHostingとFirestore Rulesのみに戻した。Dropbox PDF連携Functionsは`functions/`の変更時だけ明示配備とし、フロントエンド更新でSecret Manager権限を要求しない。
 - Stable／Bizも同じ通常配備方針（HostingとFirestore Rulesのみ）へ統一。FunctionsはDropbox関連の変更を含むリリース時だけ別途明示配備する。
+- Bizの品質ゲートにはFunctionsを配備せず、ルート型検査に必要な依存関係だけを事前取得する手順を追加。
 
 ### [2026-08-11] v0.98-dev - マイシナリオ上限16件・追加ボタン
 - マイシナリオ一覧の表示上限を16件に設定。

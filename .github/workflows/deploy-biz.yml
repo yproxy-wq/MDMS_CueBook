@@ -61,6 +61,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The root quality gate type-checks the Functions source as well. This
+      # installs its dependencies without deploying Functions.
+      - name: Install Functions dependencies for verification
+        run: npm --prefix functions ci
+
       - name: Create tenant Firebase environment
         shell: bash
         env:
