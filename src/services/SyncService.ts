@@ -122,8 +122,10 @@ export class WriteBloatGuardian {
       console.warn(`[WriteBloatGuardian] WRITE BLOAT THRESHOLD EXCEEDED (Path: '${path}', Attempts: ${recent.length} in <3s). Intercepting write to preserve Firestore allocation quota. Enforcing automatic safety throttle & single aggregated flush.`);
       
       if (this.throttles.has(path)) {
-        // Coalescing is already active & scheduled, newest function is saved, wait for flush
-        return;
+        // Coalescing is already active & scheduled. Every caller must wait for the
+        // same durable flush; resolving here would let callers mark unsaved data as
+        // synchronized.
+        return this.waitForCoalescedWrite(path);
       }
 
       const timeout = setTimeout(async () => {

@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { INITIAL_SCENARIO, BLANK_SCENARIO, DEMO_SCENARIO, DEMO_DARUMA_SCENARIO } from './constants';
+import { INITIAL_SCENARIO, BLANK_SCENARIO } from './constants';
 import { audioService } from './services/AudioService';
-import { storageService, ScenarioSessionSnapshot } from './services/StorageService';
+import { storageService } from './services/StorageService';
 import { syncService, TimerSyncData } from './services/SyncService';
 import { sessionRecoveryService } from './services/sessionRecoveryService';
 import PhaseSidebar from './components/PhaseSidebar';
@@ -12,6 +12,7 @@ import PhaseCard from './components/PhaseCard';
 import { collection, addDoc, query, deleteDoc, doc, onSnapshot, orderBy } from 'firebase/firestore';
 import { AppState, Character, ImageResource, Performance, Phase, Scenario, ScenarioSnapshot, SoundCluster, SoundConfig, SoundType } from './types';
 import { db, setOnQuotaExceededListener, handleFirestoreError, OperationType, isQuotaExceeded as checkQuotaInitial } from './lib/firebase';
+import { auth } from './lib/firebase';
 import { addSmartSnapshot } from './utils/snapshotHelper';
 import { v4 as uuidv4 } from 'uuid';
 import LiveHeader from './components/LiveHeader';
@@ -24,12 +25,10 @@ import { QuickActionsModal } from './components/modals/QuickActionsModal';
 import PostSessionSummaryModal from './components/modals/PostSessionSummaryModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { Loader2, AlertTriangle, ChevronLeft, ChevronRight, RotateCcw, History, ShieldAlert, X, Layout, Minus, Plus, Settings, Play, Pause, Volume2 } from 'lucide-react';
-import { auth, signInWithGoogle, logout } from './lib/firebase';
-import { onAuthStateChanged, User } from 'firebase/auth';
 import { NetworkToast } from './components/NetworkToast';
 import { selectSyncMedia, transformDropboxUrl } from './utils/mediaHelper';
 import { createSecureShareId, createTimerSessionId, isSecureShareId } from './utils/syncHelper';
-import { buildAppWindowUrl, getAppWindowMode } from './utils/appRoute';
+import { getAppWindowMode } from './utils/appRoute';
 import { getPdfPageStateKey } from './utils/pdfAssetHelper';
 
 import { useDisplayNow } from './hooks/useDisplayNow';
@@ -47,11 +46,17 @@ import {
   applyScenarioSettings,
   createScenarioBinding,
   fingerprintScenario,
-  readCloudScenarios,
   writeCloudScenario,
 } from './services/ScenarioRegistryService';
-import { limitScenarioCatalogEntries } from './utils/scenarioCatalog';
 import { validateAndMigrateScenario } from './utils/scenarioValidator';
+import { parseScenarioFile } from './services/ScenarioFileService';
+import { errorLogger } from './services/ErrorLogger';
+import { useAppWindowRouting } from './hooks/useAppWindowRouting';
+import { useAppModalState } from './hooks/useAppModalState';
+import { useAppAuthentication } from './hooks/useAppAuthentication';
+import { useScenarioRegistry } from './hooks/useScenarioRegistry';
+import { createScenarioSessionSnapshot, createTimerStatesForScenario } from './utils/scenarioSession';
+import { createResetScenarioWithSnapshot } from './utils/scenarioReset';
 
 const EditorView = React.lazy(() => import('./components/EditorView'));
 const TimerShareView = React.lazy(() => import('./components/TimerShareView'));
@@ -99,9 +104,26 @@ const CompactTimerReadout: React.FC<{
 
 function App() {
   const lastAutoSnapshotTimeRef = useRef<number>(0);
-  const [isQuickActionsOpen, setIsQuickActionsOpen] = useState(false);
+  const {
+    isQuickActionsOpen, setIsQuickActionsOpen,
+    isMenuOpen, setIsMenuOpen,
+    showEndConfirmation, setShowEndConfirmation,
+    showResetConfirmation, setShowResetConfirmation,
+    resetStep, setResetStep,
+    showPreferences, setShowPreferences,
+    showLoginConfirmation, setShowLoginConfirmation,
+    performanceModalOpen, setPerformanceModalOpen,
+    showSessionSummary, setShowSessionSummary,
+    historyModalOpen, setHistoryModalOpen,
+    handoutCharacterId, setHandoutCharacterId,
+    performanceHistory, setPerformanceHistory,
+    showSyncModal, setShowSyncModal,
+    isTimerDropdownOpen, setIsTimerDropdownOpen,
+    isPhaseSearchOpen, setIsPhaseSearchOpen,
+    isPhasePopupOpen, setIsPhasePopupOpen,
+    isSoundPopupOpen, setIsSoundPopupOpen,
+  } = useAppModalState();
   const [isReady, setIsReady] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
   const [isBTActive, setIsBTActive] = useState(false);
   const [state, setState] = useState<AppState>({
     currentScenario: INITIAL_SCENARIO,
@@ -136,39 +158,17 @@ function App() {
   currentScenarioRef.current = state.currentScenario;
   const latestStateRef = useRef(state);
   latestStateRef.current = state;
+  const { user, handleLogin, handleConfirmLogin, handleLogout } = useAppAuthentication(
+    state.currentScenario.syncShareId, setShowLoginConfirmation,
+  );
 
   const [activeTimerIndex, setActiveTimerIndex] = useState(0);
 
-  const setEditorMode = useCallback((isEditor: boolean, navigation: 'push' | 'replace' = 'push') => {
-    const mode = isEditor ? 'edit' : 'session';
-    const nextUrl = buildAppWindowUrl(mode, window.location.search, window.location.hash);
-
-    if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== nextUrl) {
-      const historyState = { ...window.history.state, cuebookWindow: mode };
-      if (navigation === 'replace') window.history.replaceState(historyState, '', nextUrl);
-      else window.history.pushState(historyState, '', nextUrl);
-    }
-
-    setState(previousState => previousState.isEditorMode === isEditor
-      ? previousState
-      : { ...previousState, isEditorMode: isEditor });
-  }, []);
+  const { requestedScenarioId, setEditorMode } = useAppWindowRouting(setState);
 
   const toggleEditorMode = useCallback(() => {
     setEditorMode(!state.isEditorMode);
   }, [setEditorMode, state.isEditorMode]);
-
-  useEffect(() => {
-    const handlePopState = () => {
-      const isEditor = getAppWindowMode(window.location.pathname) === 'edit';
-      setState(previousState => previousState.isEditorMode === isEditor
-        ? previousState
-        : { ...previousState, isEditorMode: isEditor });
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
 
   const currentPhase = useMemo(() => 
     (state.currentScenario.phases || []).find(p => p.id === state.currentPhaseId) || (state.currentScenario.phases || [])[0],
@@ -322,29 +322,14 @@ function App() {
 
   const [mobileTab, setMobileTab] = useState<MobileTab>('script');
   const [columnFocus, setColumnFocus] = useState<ColumnFocus>('left');
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeScriptTab, setActiveScriptTab] = useState<'guide' | 'characters'>('guide');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSoundboardCollapsed, setIsSoundboardCollapsed] = useState(false);
-  const [showEndConfirmation, setShowEndConfirmation] = useState(false);
-  const [showResetConfirmation, setShowResetConfirmation] = useState(false);
-  const [resetStep, setResetStep] = useState<'select' | 'confirm_app' | 'confirm_scenario'>('select');
-  const [showPreferences, setShowPreferences] = useState(false);
-  const [showLoginConfirmation, setShowLoginConfirmation] = useState(false);
-  const [performanceModalOpen, setPerformanceModalOpen] = useState(false);
-  const [showSessionSummary, setShowSessionSummary] = useState(false);
-  const [historyModalOpen, setHistoryModalOpen] = useState(false);
-  const [handoutCharacterId, setHandoutCharacterId] = useState<string | null>(null);
-  const [performanceHistory, setPerformanceHistory] = useState<Performance[]>([]);
-  const [showSyncModal, setShowSyncModal] = useState(false);
   const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
   const [lastError, setLastError] = useState<{code: string; message: string} | null>(null);
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(() => checkQuotaInitial());
-  const [isTimerDropdownOpen, setIsTimerDropdownOpen] = useState(false);
   const timerDropdownRef1 = useRef<HTMLDivElement>(null);
   const timerDropdownRef2 = useRef<HTMLDivElement>(null);
-  const [isPhaseSearchOpen, setIsPhaseSearchOpen] = useState(false);
-  const [scenarioEntries, setScenarioEntries] = useState<ScenarioRegistryEntry[]>([]);
   const [scenarioSwitching, setScenarioSwitching] = useState(false);
   const [pendingScenarioSwitch, setPendingScenarioSwitch] = useState<ScenarioRegistryEntry | null>(null);
   const initialScenarioResolutionRef = useRef(false);
@@ -471,8 +456,6 @@ function App() {
     !isTabletVertical
   , [state.currentScenario.masterVolumePosition, layoutMode, isTabletVertical]);
 
-  const [isPhasePopupOpen, setIsPhasePopupOpen] = useState<boolean>(false);
-  const [isSoundPopupOpen, setIsSoundPopupOpen] = useState<boolean>(false);
 
   // Local videos hook
   const { combinedImages: fallbackMedia } = useLocalVideos(state.currentScenario.images || []);
@@ -542,7 +525,7 @@ function App() {
       });
       return () => unsubscribe();
     }
-  }, [user, isQuotaExceeded]);
+  }, [user, isQuotaExceeded, setPerformanceHistory]);
 
   useEffect(() => {
     let lastWidth = window.innerWidth;
@@ -589,11 +572,6 @@ function App() {
     [state.currentScenario.phases, state.previewPhaseId]
   );
 
-  const requestedScenarioId = useMemo(
-    () => new URLSearchParams(window.location.search).get('scenarioId'),
-    [],
-  );
-
   const { syncData } = useSyncEngine({
     user,
     state,
@@ -605,86 +583,9 @@ function App() {
     scenarioId: requestedScenarioId,
   });
 
-  const refreshScenarioRegistry = useCallback(async () => {
-    if (!isReady) return;
-    try {
-      const keys = await storageService.listScenarioKeys();
-      for (const demoScenario of [DEMO_SCENARIO, DEMO_DARUMA_SCENARIO]) {
-        if (!keys.includes(demoScenario.id)) await storageService.saveScenario(demoScenario.id, demoScenario);
-      }
-      const localEntries = new Map<string, ScenarioRegistryEntry>();
-      for (const key of [...keys, DEMO_SCENARIO.id, DEMO_DARUMA_SCENARIO.id]) {
-        if (key === 'gm_accomplice_scenario') continue;
-        const localScenario = await storageService.loadScenario(key);
-        if (!localScenario?.id) continue;
-        const binding = await storageService.loadBinding(localScenario.id);
-        if (!binding) {
-          await createScenarioBinding(localScenario, `${localScenario.title || localScenario.id}.json`, localScenario.id);
-        }
-        localEntries.set(localScenario.id, {
-          scenarioId: localScenario.id,
-          title: localScenario.title || localScenario.id,
-          fileFingerprint: await fingerprintScenario(localScenario),
-          updatedAt: localScenario.lastUpdated || 0,
-          availability: 'available',
-          localScenarioKey: localScenario.id,
-          source: 'local',
-        });
-      }
-
-      const currentScenario = currentScenarioRef.current;
-      if (currentScenario.id && !localEntries.has(currentScenario.id)) {
-        localEntries.set(currentScenario.id, {
-          scenarioId: currentScenario.id,
-          title: currentScenario.title || currentScenario.id,
-          fileFingerprint: await fingerprintScenario(currentScenario),
-          updatedAt: currentScenario.lastUpdated || 0,
-          availability: 'available',
-          localScenarioKey: currentScenario.id,
-          source: 'local',
-        });
-      }
-
-      const cloudEntries = await readCloudScenarios(user).catch(error => {
-        console.warn('Scenario registry: cloud list unavailable; using local catalog.', error);
-        return [];
-      });
-      for (const cloud of cloudEntries) {
-        const local = localEntries.get(cloud.scenarioId);
-        localEntries.set(cloud.scenarioId, {
-          scenarioId: cloud.scenarioId,
-          title: cloud.title || local?.title || cloud.scenarioId,
-          fileNameHint: cloud.fileNameHint,
-          fileFingerprint: cloud.fileFingerprint || local?.fileFingerprint,
-          updatedAt: Math.max(cloud.updatedAt || 0, local?.updatedAt || 0),
-          availability: local
-            ? (cloud.fileFingerprint && local.fileFingerprint && cloud.fileFingerprint !== local.fileFingerprint ? 'mismatch' : 'available')
-            : 'unbound',
-          localScenarioKey: local?.localScenarioKey,
-          source: local ? 'both' : 'cloud',
-          settings: cloud.settings,
-        });
-      }
-      const currentCloud = cloudEntries.find(item => item.scenarioId === currentScenarioRef.current.id);
-      if (currentCloud?.settings) {
-        setState(previous => ({
-          ...previous,
-          currentScenario: applyScenarioSettings(previous.currentScenario, currentCloud.settings),
-          syncConfig: currentCloud.settings?.syncConfig || previous.syncConfig,
-        }));
-      }
-      setScenarioEntries(limitScenarioCatalogEntries(
-        Array.from(localEntries.values()),
-        currentScenarioRef.current.id,
-      ));
-    } catch (error) {
-      console.error('Scenario registry refresh failed:', error);
-    }
-  }, [isReady, user]);
-
-  useEffect(() => {
-    refreshScenarioRegistry();
-  }, [refreshScenarioRegistry]);
+  const { scenarioEntries, refreshScenarioRegistry } = useScenarioRegistry({
+    isReady, user, currentScenarioRef, setState,
+  });
 
   useEffect(() => {
     if (!isReady || !user) return;
@@ -693,6 +594,10 @@ function App() {
     const timer = window.setTimeout(() => {
       writeCloudScenario(user, state.currentScenario).catch(error => {
         console.warn('Scenario settings sync failed; local copy is retained.', error);
+        errorLogger.logOperationError(error, {
+          code: 'SCENARIO_SETTINGS_SYNC_FAILED', operation: 'scenario.settings.sync', recoverable: true,
+          scenarioId: state.currentScenario.id,
+        });
       });
     }, 1200);
     return () => window.clearTimeout(timer);
@@ -1270,7 +1175,7 @@ function App() {
       };
     });
     setShowEndConfirmation(false);
-  }, [state.currentScenario.syncShareId]);
+  }, [state.currentScenario.syncShareId, setShowEndConfirmation]);
 
   const handleResetSession = useCallback(() => {
     const confirmReset = window.confirm("セッションの進行状態（各フェーズの完了、タイマー、進捗など）のみをリセットしますか？\n※シナリオデータ（台本内容やサウンド設定など）は消去されません。");
@@ -1337,31 +1242,19 @@ function App() {
   }, [state.currentScenario, setState]);
 
   const handleAppReset = useCallback(async () => {
-    // 誤操作救済として、初期化直前のシナリオをスナップショットとしてINITIAL_SCENARIOに引き継ぎマージします
-    const nowMs = Date.now();
-    const date = new Date(nowMs);
-    const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-    
-    const preResetSnapshot: ScenarioSnapshot = {
-      id: uuidv4(),
-      label: `[自動: アプリ初期化前] ${timeStr}`,
-      timestamp: nowMs,
-      scenarioData: { ...state.currentScenario }
-    };
-    
-    const originalSnapshots = state.currentScenario.snapshots || [];
-    const mergedSnapshots = addSmartSnapshot(originalSnapshots, preResetSnapshot);
-    
-    const targetInitialScenario = {
-      ...INITIAL_SCENARIO,
-      snapshots: mergedSnapshots
-    };
+    const targetInitialScenario = createResetScenarioWithSnapshot(
+      state.currentScenario, INITIAL_SCENARIO, '[自動: アプリ初期化前]',
+    );
 
     // 1. Clear IndexedDB
     try {
       await storageService.saveScenario('gm_accomplice_scenario', targetInitialScenario);
     } catch (e) {
       console.error("IndexedDB reset failed:", e);
+      errorLogger.logOperationError(e, {
+        code: 'APP_RESET_STORAGE_FAILED', operation: 'app.reset.storage', recoverable: true,
+        scenarioId: state.currentScenario.id,
+      });
     }
 
     // 2. Clear localStorage keys starting with cuebook_
@@ -1376,6 +1269,10 @@ function App() {
       }
     } catch (e) {
       console.error("LocalStorage reset failed:", e);
+      errorLogger.logOperationError(e, {
+        code: 'APP_RESET_PREFERENCES_FAILED', operation: 'app.reset.preferences', recoverable: true,
+        scenarioId: state.currentScenario.id,
+      });
     }
 
     // 3. Reset React App State completely
@@ -1410,29 +1307,12 @@ function App() {
     setActiveTimerIndex(0);
     setShowResetConfirmation(false);
     setResetStep('select');
-  }, [state.currentScenario]);
+  }, [state.currentScenario, setResetStep, setShowResetConfirmation]);
 
   const handleScenarioReset = useCallback(async () => {
-    // Resets current scenario to BLANK_SCENARIO
-    // 誤操作救済として、リセット直前のシナリオをスナップショットとしてBLANK_SCENARIOに引き継ぎマージします
-    const nowMs = Date.now();
-    const date = new Date(nowMs);
-    const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-    
-    const preResetSnapshot: ScenarioSnapshot = {
-      id: uuidv4(),
-      label: `[自動: リセット直前] ${timeStr}`,
-      timestamp: nowMs,
-      scenarioData: { ...state.currentScenario }
-    };
-    
-    const originalSnapshots = state.currentScenario.snapshots || [];
-    const mergedSnapshots = addSmartSnapshot(originalSnapshots, preResetSnapshot);
-    
-    const targetBlankScenario = {
-      ...BLANK_SCENARIO,
-      snapshots: mergedSnapshots
-    };
+    const targetBlankScenario = createResetScenarioWithSnapshot(
+      state.currentScenario, BLANK_SCENARIO, '[自動: リセット直前]',
+    );
 
     try {
       await storageService.saveScenario('gm_accomplice_scenario', targetBlankScenario);
@@ -1457,7 +1337,7 @@ function App() {
     setActiveTimerIndex(0);
     setShowResetConfirmation(false);
     setResetStep('select');
-  }, [state.currentScenario]);
+  }, [state.currentScenario, setResetStep, setShowResetConfirmation]);
 
   const handleUpdateCharacter = useCallback((charId: string, updates: Partial<Character>) => {
     setState(prev => ({
@@ -1521,7 +1401,7 @@ function App() {
       });
     }
     setHandoutCharacterId(id);
-  }, []);
+  }, [setHandoutCharacterId]);
 
   const handleUpdateSoundClusters = useCallback((clusters: SoundCluster[]) => {
     handleUpdateScenario({
@@ -1532,38 +1412,13 @@ function App() {
 
   const handleOpenSync = useCallback(() => {
     setShowSyncModal(true);
-  }, []);
-
-  const resetTimerStatesForScenario = (scenario: Scenario): AppState['timerStates'] => {
-    const timers: AppState['timerStates'] = {};
-    (scenario.phases || []).forEach(phase => {
-      (phase.timers || []).forEach(timer => {
-        timers[timer.id] = { seconds: timer.durationMinutes * 60, isRunning: false, startTime: null };
-      });
-    });
-    return timers;
-  };
+  }, [setShowSyncModal]);
 
   const commitScenarioSwitch = useCallback(async (entry: ScenarioRegistryEntry, scenario: Scenario) => {
     const current = latestStateRef.current;
     // AppState has one active scenario at a time. Progress remains parallel
     // in IndexedDB, so persist the current session before replacing it.
-    const currentSession: ScenarioSessionSnapshot = {
-      scenarioId: current.currentScenario.id,
-      currentPhaseId: current.currentPhaseId,
-      previewPhaseId: current.previewPhaseId,
-      timerStates: current.timerStates,
-      phaseResults: current.phaseResults,
-      phaseDurations: current.phaseDurations,
-      activeImageId: current.activeImageId,
-      gmActiveImageId: current.gmActiveImageId,
-      syncConfig: current.syncConfig,
-      sessionStartTime: current.sessionStartTime,
-      phaseStartTime: current.phaseStartTime,
-      exitTime: current.exitTime,
-      isPaused: current.isPaused,
-      savedAt: Date.now(),
-    };
+    const currentSession = createScenarioSessionSnapshot(current);
     await storageService.saveSession(current.currentScenario.id, currentSession);
     await storageService.saveScenario(scenario.id, scenario);
     const nextPhaseId = scenario.phases?.[0]?.id || '';
@@ -1572,7 +1427,7 @@ function App() {
       currentScenario: scenario,
       currentPhaseId: nextPhaseId,
       previewPhaseId: nextPhaseId,
-      timerStates: resetTimerStatesForScenario(scenario),
+      timerStates: createTimerStatesForScenario(scenario),
       phaseResults: {},
       phaseDurations: {},
       isPlaying: {},
@@ -1602,24 +1457,6 @@ function App() {
     params.set('scenarioId', state.currentScenario.id);
     window.history.replaceState({ ...window.history.state, scenarioId: state.currentScenario.id }, '', `${window.location.pathname}?${params.toString()}${window.location.hash}`);
   }, [state.currentScenario.id]);
-
-  const parseScenarioFile = async (file: File): Promise<Scenario> => {
-    const fileName = String(file.name || '').toLowerCase();
-    let content: string;
-    // `.cuebook` exports are ZIP containers too. Do not feed their binary
-    // `PK\x03\x04` header into JSON.parse (which produces "Unexpected token P").
-    const isArchive = fileName.endsWith('.zip') || fileName.endsWith('.cuebook') || file.type === 'application/zip';
-    if (isArchive) {
-      const { default: JSZip } = await import('jszip');
-      const zip = await JSZip.loadAsync(file);
-      const jsonFile = Object.values(zip.files).find(item => String(item.name || '').toLowerCase().endsWith('.json'));
-      if (!jsonFile) throw new Error('ZIP内にシナリオJSONがありません。');
-      content = await jsonFile.async('string');
-    } else {
-      content = await file.text();
-    }
-    return validateAndMigrateScenario(JSON.parse(content));
-  };
 
   const bindScenarioFile = useCallback((entry: ScenarioRegistryEntry) => {
     const input = document.createElement('input');
@@ -1653,6 +1490,10 @@ function App() {
         await commitScenarioSwitch(entry, scenarioWithSettings);
       } catch (error) {
         console.error('Scenario binding failed:', error);
+        errorLogger.logOperationError(error, {
+          code: 'SCENARIO_BIND_FAILED', operation: 'scenario.bind', recoverable: true,
+          scenarioId: entry.scenarioId,
+        });
         alert('シナリオファイルを読み込めませんでした。形式と内容を確認してください。');
       } finally {
         setScenarioSwitching(false);
@@ -1679,6 +1520,10 @@ function App() {
       await commitScenarioSwitch(entry, nextScenario);
     } catch (error) {
       console.error('Scenario switch failed:', error);
+      errorLogger.logOperationError(error, {
+        code: 'SCENARIO_SWITCH_FAILED', operation: 'scenario.switch', recoverable: true,
+        scenarioId: entry.scenarioId,
+      });
       alert('シナリオを切り替えられませんでした。現在のシナリオは維持されています。');
       setScenarioSwitching(false);
     }
@@ -1702,7 +1547,7 @@ function App() {
 
   const registerLocalScenarios = useCallback(async () => {
     if (!user) {
-      handleLogin();
+      setShowLoginConfirmation(true);
       return;
     }
     setScenarioSwitching(true);
@@ -1720,11 +1565,15 @@ function App() {
       setMigrationToast({ show: true, title: 'MY SCENARIOS UPDATED', description: 'この端末のシナリオをアカウントに登録しました。', type: 'success' });
     } catch (error) {
       console.error('Scenario registration failed:', error);
+      errorLogger.logOperationError(error, {
+        code: 'SCENARIO_REGISTRATION_FAILED', operation: 'scenario.register', recoverable: true,
+        scenarioId: state.currentScenario.id,
+      });
       alert('マイシナリオへの登録に失敗しました。ローカルデータは保持されています。');
     } finally {
       setScenarioSwitching(false);
     }
-  }, [refreshScenarioRegistry, state.currentScenario, user]);
+  }, [refreshScenarioRegistry, setShowLoginConfirmation, state.currentScenario, user]);
 
   const confirmPendingScenarioSwitch = useCallback(async () => {
     if (!pendingScenarioSwitch) return;
@@ -1794,6 +1643,10 @@ function App() {
         }
       } catch (err) { 
         console.error("Import failed:", err);
+        errorLogger.logOperationError(err, {
+          code: 'SCENARIO_IMPORT_FAILED', operation: 'scenario.import', recoverable: true,
+          scenarioId: state.currentScenario.id,
+        });
         alert("Import failed. Please check the file format."); 
       }
     };
@@ -1842,13 +1695,6 @@ function App() {
     return layoutMode;
   };
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-    });
-    return () => unsubscribe();
-  }, []);
-
   // Sync active timer to Firebase - Moved to useTimerSync
 
   const getShareTimerUrl = () => {
@@ -1874,31 +1720,6 @@ function App() {
     const shareId = state.currentScenario.syncShareId;
     if (!user || !isSecureShareId(shareId)) return;
     await syncService.resetTimerSession(createTimerSessionId(user.uid, shareId));
-  };
-
-  const handleLogin = () => {
-    setShowLoginConfirmation(true);
-  };
-
-  const handleConfirmLogin = async () => {
-    setShowLoginConfirmation(false);
-    try {
-      await signInWithGoogle();
-    } catch (e) {
-      console.error("Login failed", e);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      if (user) {
-        const shareId = state.currentScenario.syncShareId;
-        if (isSecureShareId(shareId)) syncService.clearSession(createTimerSessionId(user.uid, shareId));
-      }
-      await logout();
-    } catch (e) {
-      console.error("Logout failed", e);
-    }
   };
 
   const handleSavePerformance = async (perfData: Omit<Performance, 'id' | 'timestamp'>) => {
@@ -1979,7 +1800,7 @@ function App() {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
     };
-  }, [isTimerDropdownOpen]);
+  }, [isTimerDropdownOpen, setIsTimerDropdownOpen]);
 
   const queryParams = new URLSearchParams(window.location.search);
   const view = queryParams.get('view');

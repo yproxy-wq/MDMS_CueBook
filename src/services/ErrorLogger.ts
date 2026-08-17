@@ -9,10 +9,62 @@ export interface LoggedError {
   count: number;
   lastOccurrence: string;
   resolved: boolean;
+  code?: string;
+  operation?: string;
+  recoverable?: boolean;
+  retryCount?: number;
+  scenarioId?: string;
+}
+
+export interface OperationErrorDetails {
+  code: string;
+  operation: string;
+  recoverable: boolean;
+  retryCount?: number;
+  scenarioId?: string;
 }
 
 const STORAGE_KEY = 'cuebook_error_diagnostics_v1';
 const MAX_PERSISTED_ERRORS = 50;
+
+/** Safely restores only the diagnostic records the current version understands. */
+export function normalizeLoggedErrors(value: unknown): LoggedError[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((entry): LoggedError[] => {
+    if (!entry || typeof entry !== 'object') return [];
+    const candidate = entry as Partial<LoggedError>;
+    if (
+      typeof candidate.id !== 'string' ||
+      typeof candidate.timestamp !== 'string' ||
+      typeof candidate.errorMessage !== 'string' ||
+      typeof candidate.context !== 'string' ||
+      typeof candidate.lastOccurrence !== 'string'
+    ) {
+      return [];
+    }
+
+    return [{
+      id: candidate.id,
+      timestamp: candidate.timestamp,
+      errorMessage: candidate.errorMessage,
+      ...(typeof candidate.errorStack === 'string' ? { errorStack: candidate.errorStack } : {}),
+      context: candidate.context,
+      count: typeof candidate.count === 'number' && Number.isFinite(candidate.count)
+        ? Math.max(1, Math.floor(candidate.count))
+        : 1,
+      lastOccurrence: candidate.lastOccurrence,
+      resolved: typeof candidate.resolved === 'boolean' ? candidate.resolved : false,
+      ...(typeof candidate.code === 'string' ? { code: candidate.code } : {}),
+      ...(typeof candidate.operation === 'string' ? { operation: candidate.operation } : {}),
+      ...(typeof candidate.recoverable === 'boolean' ? { recoverable: candidate.recoverable } : {}),
+      ...(typeof candidate.retryCount === 'number' && Number.isFinite(candidate.retryCount)
+        ? { retryCount: Math.max(0, Math.floor(candidate.retryCount)) }
+        : {}),
+      ...(typeof candidate.scenarioId === 'string' ? { scenarioId: candidate.scenarioId } : {}),
+    }];
+  }).slice(0, MAX_PERSISTED_ERRORS);
+}
 
 class ErrorLoggerService {
   private errors: LoggedError[] = [];
@@ -28,11 +80,22 @@ class ErrorLoggerService {
       if (typeof localStorage === 'undefined') return;
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        this.errors = JSON.parse(stored);
+        const parsed = JSON.parse(stored);
+        this.errors = normalizeLoggedErrors(parsed);
+        // Repair malformed, legacy, or oversized records immediately so a
+        // later error cannot be blocked by corrupt persisted diagnostics.
+        if (JSON.stringify(parsed) !== JSON.stringify(this.errors)) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(this.errors));
+        }
       }
     } catch (e) {
       console.error('[ErrorLogger] Failed to load persisted logs from localStorage:', e);
       this.errors = [];
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        // Diagnostics must never fail the application while attempting recovery.
+      }
     }
   }
 
@@ -85,13 +148,20 @@ class ErrorLoggerService {
   /**
    * Main error recording entry. Automatically scrubs secrets and de-duplicates identical errors.
    */
-  public logError(error: unknown, context: string, overrideStack?: string): LoggedError {
+  public logError(error: unknown, context: string, overrideStack?: string, details?: OperationErrorDetails): LoggedError {
     const rawMessage = error instanceof Error ? error.message : String(error);
     const rawStack = overrideStack || (error instanceof Error ? error.stack : undefined);
 
     const errorMessage = maskSensitiveData(rawMessage);
     const errorStack = rawStack ? maskSensitiveData(rawStack) : undefined;
     const cleanContext = maskSensitiveData(context);
+    const safeDetails = details ? {
+      code: details.code,
+      operation: details.operation,
+      recoverable: details.recoverable,
+      ...(typeof details.retryCount === 'number' ? { retryCount: Math.max(0, Math.floor(details.retryCount)) } : {}),
+      ...(details.scenarioId ? { scenarioId: maskSensitiveData(details.scenarioId) } : {}),
+    } : {};
 
     // Compute simple signature for de-duplication
     // We group by the cleaned message and the context to know if it's recurring
@@ -113,7 +183,8 @@ class ErrorLoggerService {
         count: existing.count + 1,
         lastOccurrence: now,
         // Keep the stack updated if it was previously undefined
-        errorStack: existing.errorStack || errorStack
+        errorStack: existing.errorStack || errorStack,
+        ...safeDetails,
       };
       // Move to top of list as the most recent activity
       this.errors.splice(existingIndex, 1);
@@ -128,7 +199,8 @@ class ErrorLoggerService {
         context: cleanContext,
         count: 1,
         lastOccurrence: now,
-        resolved: false
+        resolved: false,
+        ...safeDetails,
       };
       this.errors.unshift(updatedError);
     }
@@ -140,6 +212,10 @@ class ErrorLoggerService {
     networkMonitor.recordGeneralError('RUNTIME_CRASH_ERR', errorMessage, cleanContext);
 
     return updatedError;
+  }
+
+  public logOperationError(error: unknown, details: OperationErrorDetails, overrideStack?: string): LoggedError {
+    return this.logError(error, details.operation, overrideStack, details);
   }
 
   public getErrors(): LoggedError[] {

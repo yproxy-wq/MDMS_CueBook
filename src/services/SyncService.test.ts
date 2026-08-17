@@ -154,4 +154,51 @@ describe('SyncService capability integration', () => {
     expect(task).toHaveBeenCalledTimes(3);
     vi.useRealTimers();
   });
+
+  it('keeps every write after the throttle threshold pending until the latest task is durable', async () => {
+    vi.useFakeTimers();
+    const path = `burst-path-${Date.now()}`;
+    const first = vi.fn().mockResolvedValue(undefined);
+    const latest = vi.fn().mockResolvedValue(undefined);
+
+    await WriteBloatGuardian.execute(path, first);
+    await WriteBloatGuardian.execute(path, first);
+    const third = WriteBloatGuardian.execute(path, first);
+    const fourth = WriteBloatGuardian.execute(path, latest);
+    let thirdSettled = false;
+    let fourthSettled = false;
+    void third.then(() => { thirdSettled = true; });
+    void fourth.then(() => { fourthSettled = true; });
+
+    await vi.advanceTimersByTimeAsync(1499);
+    expect(thirdSettled).toBe(false);
+    expect(fourthSettled).toBe(false);
+    expect(latest).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(Promise.all([third, fourth])).resolves.toEqual([undefined, undefined]);
+    expect(latest).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('rejects every throttled caller when the latest coalesced write fails', async () => {
+    vi.useFakeTimers();
+    const path = `failed-burst-path-${Date.now()}`;
+    const failure = new Error('durable write failed');
+    const first = vi.fn().mockResolvedValue(undefined);
+    const latest = vi.fn().mockRejectedValue(failure);
+
+    await WriteBloatGuardian.execute(path, first);
+    await WriteBloatGuardian.execute(path, first);
+    const third = WriteBloatGuardian.execute(path, first);
+    const fourth = WriteBloatGuardian.execute(path, latest);
+    const thirdOutcome = third.catch(error => error);
+    const fourthOutcome = fourth.catch(error => error);
+
+    await vi.advanceTimersByTimeAsync(1500);
+    await expect(thirdOutcome).resolves.toBe(failure);
+    await expect(fourthOutcome).resolves.toBe(failure);
+    expect(latest).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
 });

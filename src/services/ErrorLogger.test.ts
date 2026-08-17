@@ -14,7 +14,7 @@ if (typeof window === 'undefined') {
 }
 
 // 2. Import services after localStorage mocking is guaranteed
-import { errorLogger } from './ErrorLogger';
+import { errorLogger, normalizeLoggedErrors } from './ErrorLogger';
 import { maskSensitiveData } from './NetworkMonitor';
 
 describe('NetworkMonitor - maskSensitiveData', () => {
@@ -115,5 +115,49 @@ describe('ErrorLogger Service', () => {
     unsubscribe();
     errorLogger.logError(new Error('Another syntax error'), 'Parser');
     expect(callback).toHaveBeenCalledTimes(2); // Should not emit after unsubscribe
+  });
+
+  it('records structured, recoverable operation context without retaining raw scenario identifiers', () => {
+    const logged = errorLogger.logOperationError(new Error('switch failed'), {
+      code: 'SCENARIO_SWITCH_FAILED',
+      operation: 'scenario.switch',
+      recoverable: true,
+      retryCount: 2,
+      scenarioId: '123e4567-e89b-12d3-a456-426614174000',
+    });
+
+    expect(logged).toMatchObject({
+      code: 'SCENARIO_SWITCH_FAILED',
+      operation: 'scenario.switch',
+      recoverable: true,
+      retryCount: 2,
+      scenarioId: '[UUID_MASKED]',
+    });
+  });
+
+  it('rejects non-array persisted data and repairs partial legacy entries safely', () => {
+    expect(normalizeLoggedErrors({ broken: true })).toEqual([]);
+    expect(normalizeLoggedErrors('not an error list')).toEqual([]);
+    expect(normalizeLoggedErrors([
+      null,
+      { id: 'missing-required-fields' },
+      {
+        id: 'legacy-entry',
+        timestamp: '2026-08-18T00:00:00.000Z',
+        errorMessage: 'legacy failure',
+        context: 'legacy',
+        lastOccurrence: '2026-08-18T00:00:00.000Z',
+        count: 'wrong-type',
+        resolved: 'wrong-type',
+      },
+    ])).toEqual([{
+      id: 'legacy-entry',
+      timestamp: '2026-08-18T00:00:00.000Z',
+      errorMessage: 'legacy failure',
+      context: 'legacy',
+      count: 1,
+      lastOccurrence: '2026-08-18T00:00:00.000Z',
+      resolved: false,
+    }]);
   });
 });

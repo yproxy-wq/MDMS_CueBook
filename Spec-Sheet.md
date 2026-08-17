@@ -52,6 +52,7 @@
 3. **高精度同期タイマーエンジン**:
    - `startTime` (基準時刻) に基づくドリフト補正リアルタイムタイマー。
    - Firebase Firestore (`SyncService`) を介した複数端末・子ウィンドウ間での1秒未満精度同期。
+   - 同一同期パスへの短時間連続更新は最新ペイロードへ集約するが、集約中のすべての呼び出しはFirestoreへの耐久書き込みが成功または失敗するまで完了扱いにしない。ローカル同期済みキャッシュは耐久書き込み成功後にだけ更新する。
 4. **共有 capability セキュリティ (v1.09)**:
    - Timer と Handout の共有 URL は `crypto.getRandomValues` で生成した 256-bit の不透明 ID を capability として用いる。URL を知る端末だけが単一の共有ドキュメントを読める。
    - Firestore rules は capability ID とドキュメント ID の一致を検証し、コレクション `list` と旧来の推測可能 URL を拒否する。平文 PIN と更新者 UID は共有ペイロードに含めない。
@@ -115,6 +116,7 @@
    - IndexedDBの`scenarios`は端末内のシナリオ本体、`scenarioBindings`は端末ごとのファイル紐づけを保持する。未紐づけ、利用可能、更新版確認を明示する。
    - 同一`scenarioId`でfingerprintだけが変わったファイルは更新版として確認し、IDが異なるファイルは現在のシナリオを変更せず拒否する。
    - `/session?scenarioId=<id>` および `/edit?scenarioId=<id>` を直接開け、ブラウザの戻る／進むでも切り替える。未紐づけの場合はファイル選択へ誘導する。
+   - `scenarioId` の変更により非同期読み込みが重複した場合、最後に開始した要求だけがアプリ状態と準備完了状態を更新する。古い要求の完了・失敗は現在表示中のシナリオを上書きしない。
    - シナリオ管理は中央モーダルで一覧・登録・端末紐づけ・入出力・リセットを扱う。`Ctrl/Cmd + Shift + 1〜9` は一覧順のシナリオ切り替えに予約する。
    - IndexedDB `sessions` は`scenarioId`をキーに、現在フェーズ、タイマー状態、フェーズ結果、同期表示状態を保存・復元する。各シナリオは並列に独立した進行を持つが、1つのアプリ画面でアクティブにできるシナリオは常に1つだけとし、切り替え前に現在セッションを保存する。
    - 管理モーダルの各シナリオカードは`?scenarioId=<id>`を含む専用URLを表示し、クリップボードへのコピーと新しいタブでのオープンを提供する。URLはシナリオ本体を含まず、開いた端末側のローカルファイル紐づけを要求する。
@@ -215,9 +217,17 @@
 - `src/hooks/useGlobalShortcuts.test.ts`: Sync Studio、メディア、BGM/SE、タイマー、フェーズ操作のショートカット回帰試験
 - `src/services/AudioService.ts`: Web Audio API シングルトン管理クラス
 - `src/services/SyncService.ts`: Firebase Firestore リアルタイム同期層
+- `src/services/ErrorLogger.ts`: ローカル永続の診断ログ。保存データをランタイム検証・自己修復し、構造化した操作コード、操作名、復旧可能性を記録する。
 - `src/services/ScenarioRegistryService.ts`: Googleアカウントのシナリオ台帳、設定同期、fingerprint、端末紐づけ境界
+- `src/services/ScenarioFileService.ts`: `.json` / `.zip` / `.cuebook` のシナリオ解析境界
   - `src/services/StorageService.ts` / `src/services/sessionRecoveryService.ts`: 同一のIndexedDBスキーマ世代（v3）で、シナリオ本体、`sessions`、端末別`scenarioBindings`およびセッション復旧を永続化する。
 - `src/hooks/useAppTimer.ts`: 既存タイマー互換の 1 秒表示フック
+- `src/hooks/useSyncEngine.ts`: IndexedDB初期化・自動保存・進行保存・Firestore同期の統括。要求世代のガードにより古い非同期読み込みを無効化する。
+- `src/hooks/useAppWindowRouting.ts`: 進行／編集URLと `scenarioId` のブラウザ履歴同期
+- `src/hooks/useAppModalState.ts`: 表示専用モーダル／ポップアップ状態の集約
+- `src/hooks/useAppAuthentication.ts`: Firebase認証状態、ログイン、ログアウト、同期セッションの安全な解除
+- `src/hooks/useScenarioRegistry.ts`: ローカル／クラウドのシナリオ台帳統合と更新
+- `src/utils/scenarioSession.ts` / `src/utils/scenarioReset.ts`: シナリオ切替時の進行スナップショット、タイマー初期化、リセット前スナップショットを生成する純粋ロジック
 - `src/hooks/useDisplayNow.ts` / `src/components/LiveHeader.tsx`: root state を更新せず leaf component と Header wrapper で表示時刻を更新する層
 - `src/index.css` / `vite.config.ts`: Tailwind CSS のビルド時生成とグローバルCSSエントリ
 - `src/components/DebouncedInput.tsx`: 450ms を標準とする textarea 用デバウンス入力
