@@ -93,7 +93,7 @@ jobs:
           create_credentials_file: true
           export_environment_variables: true
 
-      - name: Deploy Firebase services
+      - name: Deploy Firebase Hosting and Firestore Rules
         shell: bash
         run: |
           firebase_token="$(gcloud auth print-access-token)"
@@ -101,4 +101,4 @@ jobs:
             echo "::error::Unable to obtain an access token for Firebase Hosting"
             exit 1
           fi
-          npx firebase-tools deploy --only hosting,firestore:rules,functions --project cuebook-stable --non-interactive --token "$firebase_token"
+          npx firebase-tools deploy --only hosting,firestore:rules --project cuebook-stable --non-interactive --token "$firebase_token"
