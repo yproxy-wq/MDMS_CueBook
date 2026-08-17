@@ -33,9 +33,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Functions dependencies
-        run: npm --prefix functions ci
-
       - name: Create development Firebase environment
         shell: bash
         env:
@@ -87,7 +84,7 @@ jobs:
           create_credentials_file: true
           export_environment_variables: true
 
-      - name: Deploy Firebase services
+      - name: Deploy Firebase Hosting and Firestore Rules
         shell: bash
         run: |
           firebase_token="$(gcloud auth print-access-token)"
@@ -96,7 +93,7 @@ jobs:
             exit 1
           fi
           npx firebase-tools deploy \
-            --only hosting,firestore:rules,functions \
+            --only hosting,firestore:rules \
             --project cuebook-dev \
             --non-interactive \
             --token "$firebase_token"
