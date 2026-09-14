@@ -17,7 +17,7 @@ interface ScenarioManagerModalProps {
   onRegister?: () => void;
   onToggleEditor: () => void;
   onImport: () => void;
-  onExport: (format?: 'zip' | 'cuebook') => void;
+  onExport: () => void;
   onReset?: () => void;
   onResetSession?: () => void;
 }
@@ -178,7 +178,7 @@ const ScenarioManagerModal: React.FC<ScenarioManagerModalProps> = ({
               <div className="rounded-xl border border-white/10 bg-white/[0.025] p-3">
                 <button onClick={() => { onToggleEditor(); onClose(); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs text-sky-300 hover:bg-sky-400/10"><Edit3 size={15} />{isEditorMode ? '通常モード（SESSION）' : '編集ウィンドウ（EDIT）'}</button>
                 <button onClick={() => { onImport(); onClose(); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs text-white/70 hover:bg-white/5 hover:text-white"><FileUp size={15} />インポート</button>
-                <button onClick={() => { onExport('cuebook'); onClose(); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs text-white/70 hover:bg-white/5 hover:text-white"><Download size={15} />エクスポート</button>
+                <button onClick={() => { onExport(); onClose(); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs text-white/70 hover:bg-white/5 hover:text-white"><Download size={15} />エクスポート</button>
                 {!isEditorMode && onResetSession && <button onClick={() => { onResetSession(); onClose(); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs text-amber-300 hover:bg-amber-400/10"><RotateCcw size={15} />セッションリセット</button>}
                 {onReset && <button onClick={() => { onReset(); onClose(); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs text-red-300 hover:bg-red-400/10"><AlertTriangle size={15} />シナリオ／アプリリセット</button>}
               </div>

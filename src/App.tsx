@@ -49,7 +49,7 @@ import {
   writeCloudScenario,
 } from './services/ScenarioRegistryService';
 import { validateAndMigrateScenario } from './utils/scenarioValidator';
-import { parseScenarioFile } from './services/ScenarioFileService';
+import { parseScenarioFile, SCENARIO_FILE_ACCEPT } from './services/ScenarioFileService';
 import { errorLogger } from './services/ErrorLogger';
 import { useAppWindowRouting } from './hooks/useAppWindowRouting';
 import { useAppModalState } from './hooks/useAppModalState';
@@ -334,6 +334,10 @@ function App() {
   const [pendingScenarioSwitch, setPendingScenarioSwitch] = useState<ScenarioRegistryEntry | null>(null);
   const initialScenarioResolutionRef = useRef(false);
   const scenarioShortcutHandlerRef = useRef<(slot: number) => void>(() => undefined);
+  const scenarioTabIdRef = useRef<string>(`${Date.now()}-${Math.random()}`);
+  const scenarioChannelRef = useRef<BroadcastChannel | null>(null);
+  const remoteScenarioSwitchRef = useRef(false);
+  const pendingRemoteScenarioIdRef = useRef<string | null>(null);
 
   const [migrationToast, setMigrationToast] = useState<{
     show: boolean;
@@ -1414,6 +1418,16 @@ function App() {
     setShowSyncModal(true);
   }, [setShowSyncModal]);
 
+  const broadcastActiveScenario = useCallback((scenarioId: string) => {
+    const payload = { type: 'scenario-active', scenarioId, source: scenarioTabIdRef.current, timestamp: Date.now() };
+    scenarioChannelRef.current?.postMessage(payload);
+    try {
+      localStorage.setItem(`cuebook_active_scenario:${user?.uid || 'anonymous'}`, JSON.stringify(payload));
+    } catch {
+      // BroadcastChannel remains available when storage is blocked.
+    }
+  }, [user?.uid]);
+
   const commitScenarioSwitch = useCallback(async (entry: ScenarioRegistryEntry, scenario: Scenario) => {
     const current = latestStateRef.current;
     // AppState has one active scenario at a time. Progress remains parallel
@@ -1449,8 +1463,9 @@ function App() {
       description: `${entry.title} を開きました。`,
       type: 'success',
     });
+    if (!remoteScenarioSwitchRef.current) broadcastActiveScenario(entry.scenarioId);
     await refreshScenarioRegistry();
-  }, [refreshScenarioRegistry, setState]);
+  }, [broadcastActiveScenario, refreshScenarioRegistry, setState]);
 
   const restoreScenarioUrl = useCallback(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1461,7 +1476,7 @@ function App() {
   const bindScenarioFile = useCallback((entry: ScenarioRegistryEntry) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.json,.zip,.cuebook';
+    input.accept = SCENARIO_FILE_ACCEPT;
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) {
@@ -1583,6 +1598,43 @@ function App() {
   }, [pendingScenarioSwitch, performScenarioSelect]);
 
   useEffect(() => {
+    if (!isReady) return;
+    const scope = user?.uid || 'anonymous';
+    const channelName = `cuebook-active-scenario:${scope}`;
+    const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(channelName) : null;
+    scenarioChannelRef.current = channel;
+    const applyRemoteScenario = (scenarioId: string) => {
+      if (!scenarioId || scenarioId === state.currentScenario.id) return;
+      pendingRemoteScenarioIdRef.current = scenarioId;
+      const entry = scenarioEntries.find(item => item.scenarioId === scenarioId);
+      if (!entry || scenarioSwitching) return;
+      pendingRemoteScenarioIdRef.current = null;
+      remoteScenarioSwitchRef.current = true;
+      void performScenarioSelect(entry).finally(() => { remoteScenarioSwitchRef.current = false; });
+    };
+    const handleMessage = (event: MessageEvent<{ type?: string; scenarioId?: string; source?: string }>) => {
+      const message = event.data;
+      if (!message || message.source === scenarioTabIdRef.current) return;
+      if (message.type === 'scenario-active' && message.scenarioId) applyRemoteScenario(message.scenarioId);
+      if (message.type === 'scenario-active-request') broadcastActiveScenario(state.currentScenario.id);
+    };
+    channel?.addEventListener('message', handleMessage);
+    const storageKey = `cuebook_active_scenario:${scope}`;
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== storageKey || !event.newValue) return;
+      try { handleMessage({ data: JSON.parse(event.newValue) } as MessageEvent<{ type?: string; scenarioId?: string; source?: string }>); } catch { /* ignore malformed stale values */ }
+    };
+    window.addEventListener('storage', handleStorage);
+    channel?.postMessage({ type: 'scenario-active-request', source: scenarioTabIdRef.current });
+    return () => {
+      channel?.removeEventListener('message', handleMessage);
+      channel?.close();
+      if (scenarioChannelRef.current === channel) scenarioChannelRef.current = null;
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [broadcastActiveScenario, isReady, performScenarioSelect, scenarioEntries, scenarioSwitching, state.currentScenario.id, user?.uid]);
+
+  useEffect(() => {
     const handleScenarioHistory = () => {
       const scenarioId = new URLSearchParams(window.location.search).get('scenarioId');
       if (!scenarioId || scenarioId === state.currentScenario.id) return;
@@ -1612,7 +1664,7 @@ function App() {
     handleScenarioSelect(entry);
   }, [handleScenarioSelect, isReady, requestedScenarioId, restoreScenarioUrl, scenarioEntries, state.currentScenario.id]);
 
-  const handleExportZip = async (format: 'zip' | 'cuebook' = 'cuebook') => {
+  const handleExportZip = async () => {
     const { default: JSZip } = await import('jszip');
     const now = new Date();
     const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
@@ -1622,14 +1674,14 @@ function App() {
     const blob = await zip.generateAsync({ type: 'blob' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${baseName}.${format}`;
+    a.download = `${baseName}.zip`;
     a.click();
   };
 
   const handleImportFile = () => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.json,.zip,.cuebook';
+    input.accept = SCENARIO_FILE_ACCEPT;
     input.onchange = async (e: Event) => {
       const target = e.target as HTMLInputElement;
       const file = target.files?.[0];

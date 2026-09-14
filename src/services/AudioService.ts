@@ -411,7 +411,8 @@ class AudioService {
   async play(sound: SoundConfig, onEnded?: () => void): Promise<void> {
     this.init();
     if (this.ctx!.state === 'suspended') {
-      await this.ctx!.resume();
+      // Keep play() in the user gesture call stack for iOS/iPadOS.
+      void this.ctx!.resume().catch((error) => console.warn('[AudioService] Resume failed:', error));
     }
 
     if (!sound.url) return;

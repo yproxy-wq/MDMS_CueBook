@@ -28,7 +28,7 @@ interface HeaderProps {
   onVolumeChange: (v: number) => void;
   onToggleDucking: () => void;
   onToggleEditor: () => void;
-  onExport: (format?: 'zip' | 'cuebook') => void;
+  onExport: () => void;
   onImport: () => void;
   onReset: () => void;
   onResetSession?: () => void;

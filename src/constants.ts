@@ -378,14 +378,14 @@ GMメインウィンドウ上部の「SYNC」ボタンから開くウィンド�
 
 - **Scenario Configuration**：シナリオの基本情報、背景設定などを変更。
 - **Scenario Outline (台本アウトライン編集)**：複数のフェーズと台本の構成をパノラマビューで一覧・入れ替え。
-- **Import / Export (.cuebook)**：編集した台本をファイルとして保存。PCとiPad間でのデータ移動も簡単です。
+- **Import / Export (.zip)**：編集した台本をファイルとして保存。PCとiPad間でのデータ移動も簡単です。
 - **Reset Scenario**：編集内容をデフォルト状態（本ガイド）に戻します。
 - **Handout Distribution Modal**：全プレイヤーへのハンドアウト共有状況を一元監視。
 - **Session History (Performance)**：セッション終了後、どの日時・会場で、誰がどの配役でプレイしたかを記録（Firestoreへ保存し、いつでも一覧・分析できます）。
 
 <details>
-<summary><b> .cuebook ファイルの強み</b></summary>
-エクスポートされる \`.cuebook\` ファイルは単なるテキストデータ（JSON）なので、メールやSlack、Discord等で簡単に共有・保管できます。
+<summary><b> .zip ファイルの強み</b></summary>
+エクスポートされる \`.zip\` ファイルには検証可能なシナリオJSONを格納なので、メールやSlack、Discord等で簡単に共有・保管できます。
 [容量もわずか数KB](color:#06b6d4)と極めて軽量です。
 </details>
           `
