@@ -15,7 +15,7 @@ interface UseSyncEngineProps {
   isReady: boolean;
   setIsReady: (ready: boolean) => void;
   activeTimerIndex: number;
-  currentPhase: Phase | null | undefined;
+  timerTargetPhase: Phase | null | undefined;
   scenarioId?: string | null;
 }
 
@@ -26,7 +26,7 @@ export function useSyncEngine({
   isReady,
   setIsReady,
   activeTimerIndex,
-  currentPhase,
+  timerTargetPhase,
   scenarioId
 }: UseSyncEngineProps) {
 
@@ -168,7 +168,7 @@ export function useSyncEngine({
     user,
     state,
     state.isEditorMode,
-    currentPhase || undefined,
+    timerTargetPhase || undefined,
     activeTimerIndex
   );
 

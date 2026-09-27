@@ -489,7 +489,7 @@ export const PhasesTab: React.FC<PhasesTabProps> = React.memo(({
                             {selectedSounds.length > 0 ? (
                               <div className="flex flex-wrap gap-1 items-center max-h-[22px] overflow-hidden">
                                 {selectedSounds.map(s => (
-                                  <span key={s!.id} className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-white/5 text-white/60 border border-white/5 truncate max-w-[120px]">
+                                  <span key={s!.id} className="max-w-[120px] truncate rounded border border-amber-300/60 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold text-amber-100">
                                     {s!.name}
                                   </span>
                                 ))}
@@ -749,7 +749,7 @@ export const PhasesTab: React.FC<PhasesTabProps> = React.memo(({
                                   </div>
                                 </div>
 
-                               <div className="flex items-center pt-2 border-t border-white/5">
+                               <div hidden aria-hidden="true">
                                  <label className="flex items-center gap-2 cursor-pointer group">
                                     <input 
                                       type="checkbox" 
@@ -806,23 +806,23 @@ export const PhasesTab: React.FC<PhasesTabProps> = React.memo(({
                                <div className="space-y-1.5">
                                  <label className="text-[8px] uppercase font-black text-white/20 tracking-widest">推奨音源</label>
                                 <div className="flex flex-wrap gap-1 p-2 bg-black/40 rounded-lg border border-white/5 min-h-[40px]">
-                                  {sounds.map((s, idx) => (
+                                  {sounds.map((s, idx) => {
+                                    const isRecommended = (phase.recommendedSounds || []).includes(s.id);
+                                    return (
                                     <button key={s.id} onClick={() => {
                                       const recommended = phase.recommendedSounds || [];
                                       const next = recommended.includes(s.id)
                                         ? recommended.filter(id => id !== s.id)
                                         : [...recommended, s.id];
                                       updatePhase(phase.id, {recommendedSounds: next});
-                                    }} className={`px-2 py-0.5 rounded font-bold border transition-all ${ (phase.recommendedSounds || []).includes(s.id) ? 'bg-white/10 text-white border-white/20' : 'bg-transparent text-white/10 border-white/5 opacity-30 shadow-none'}`}
+                                    }} className={`px-2 py-0.5 rounded font-bold border transition-all ${isRecommended ? 'bg-amber-500/15 text-amber-100 border-amber-300/70 shadow-[0_0_12px_rgba(251,191,36,0.16)]' : 'bg-transparent text-white/10 border-white/5 opacity-30 shadow-none'}`}
                                       style={{
-                                        borderColor: '#666666',
-                                        color: '#bbbaba',
                                         fontSize: idx === 0 || idx === 1 ? '11px' : '10px'
                                       }}
                                     >
                                       {s.name}
                                     </button>
-                                  ))}
+                                  );})}
                                   {sounds.length === 0 && <span className="text-[8px] text-white/5 italic">No sounds defined</span>}
                                 </div>
                               </div>

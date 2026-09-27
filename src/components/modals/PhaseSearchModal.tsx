@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Eye, Play, X, Command, Clock, CheckSquare, Sparkles } from 'lucide-react';
+import { Search, Eye, X, Command, Clock, CheckSquare, Sparkles } from 'lucide-react';
 import { Phase } from '../../types';
 
 interface PhaseSearchModalProps {
@@ -22,7 +22,6 @@ export const PhaseSearchModal: React.FC<PhaseSearchModalProps> = ({
   activePhaseId,
   previewPhaseId,
   onPhasePreview,
-  onPhaseTransition,
   themeColor = '#1e50a2'
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -65,13 +64,7 @@ export const PhaseSearchModal: React.FC<PhaseSearchModalProps> = ({
         e.preventDefault();
         const selected = filteredPhases[selectedIndex];
         if (selected) {
-          if (e.shiftKey) {
-            // Shift+Enter transitions/starts the phase
-            onPhaseTransition(selected.id);
-          } else {
-            // Enter previews the phase
-            onPhasePreview(selected.id);
-          }
+          onPhasePreview(selected.id);
           onClose();
         }
       } else if (e.key === 'Escape') {
@@ -84,7 +77,7 @@ export const PhaseSearchModal: React.FC<PhaseSearchModalProps> = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown, true);
     };
-  }, [isOpen, filteredPhases, selectedIndex, onPhasePreview, onPhaseTransition, onClose]);
+  }, [isOpen, filteredPhases, selectedIndex, onPhasePreview, onClose]);
 
   // Auto-scroll selected item into view
   useEffect(() => {
@@ -209,12 +202,12 @@ export const PhaseSearchModal: React.FC<PhaseSearchModalProps> = ({
                             {/* Badges */}
                             {isActive && (
                               <span className="px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-[7px] text-emerald-400 rounded-md font-bold font-mono tracking-widest uppercase animate-pulse">
-                                Active Live
+                                タイマー対象
                               </span>
                             )}
                             {isPreview && !isActive && (
                               <span className="px-1.5 py-0.5 bg-white/5 border border-white/10 text-[7px] text-white/50 rounded-md font-bold font-mono tracking-widest uppercase">
-                                Previewing
+                                表示中
                               </span>
                             )}
                           </div>
@@ -259,21 +252,6 @@ export const PhaseSearchModal: React.FC<PhaseSearchModalProps> = ({
                             >
                               <Eye size={12} />
                             </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onPhaseTransition(phase.id);
-                                onClose();
-                              }}
-                              title="Shift+Enter to Start Phase"
-                              className="p-1.5 rounded-lg transition-all text-white border border-transparent shadow-lg"
-                              style={{
-                                backgroundColor: themeColor,
-                                boxShadow: `0 0 10px ${themeColor}40`
-                              }}
-                            >
-                              <Play size={12} className="fill-white" />
-                            </button>
                           </>
                         ) : (
                           <div className="w-5" />
@@ -295,9 +273,7 @@ export const PhaseSearchModal: React.FC<PhaseSearchModalProps> = ({
               <span className="flex items-center gap-1">
                 <kbd className="px-1 bg-white/5 border border-white/10 rounded">Enter</kbd> プレビュー
               </span>
-              <span className="flex items-center gap-1">
-                <kbd className="px-1 bg-white/5 border border-white/10 rounded">Shift</kbd> + <kbd className="px-1 bg-white/5 border border-white/10 rounded">Enter</kbd> 進行に即反映
-              </span>
+
             </div>
             <div className="flex items-center gap-1 text-[8px] font-bold tracking-widest text-white/20 uppercase">
               <Sparkles size={10} className="text-white/10" /> CueBook Performance Engine

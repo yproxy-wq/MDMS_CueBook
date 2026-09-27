@@ -14,6 +14,8 @@ export enum SoundType {
   SE = 'SE'
 }
 
+export type FadeCurve = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out';
+
 export interface SoundConfig {
   id: string;
   name: string;
@@ -25,6 +27,10 @@ export interface SoundConfig {
   fadeOutDuration?: number;
   fadeInEnabled?: boolean;  
   fadeOutEnabled?: boolean; 
+  /** Omitted values retain the historical straight-line fade. */
+  fadeInCurve?: FadeCurve;
+  /** Omitted values retain the historical straight-line fade. */
+  fadeOutCurve?: FadeCurve;
   loopEnabled?: boolean;    
   description?: string;
   volume?: number; 
@@ -111,6 +117,12 @@ export interface ImageResource {
   url: string;
   updatedAt: number;
   type?: 'image' | 'pdf' | 'video';
+  /** 永続素材の保存先。未指定は既存のローカル／外部URL互換形式。 */
+  storageProvider?: 'r2';
+  /** R2の所有者台帳ID。URLそのものはシナリオや同期データへ保存しない。 */
+  storageAssetId?: string;
+  /** R2保存時の元ファイルサイズ。容量表示用のメタデータ。 */
+  sizeBytes?: number;
   duration?: number;
   timerColor?: 'black' | 'white';
   overlayType?: 'black' | 'white' | 'none';
@@ -263,8 +275,10 @@ export interface SyncConfig {
 
 export interface AppState {
   currentScenario: Scenario;
-  currentPhaseId: string; 
-  previewPhaseId: string; 
+  /** タイマーと同期送信の対象フェーズ。表示中フェーズとは独立。 */
+  currentPhaseId: string;
+  /** GMが現在閲覧しているフェーズ。閲覧だけではタイマーを変更しない。 */
+  previewPhaseId: string;
   isPlaying: Record<string, boolean>;
   volume: number;
   isDucking: boolean;

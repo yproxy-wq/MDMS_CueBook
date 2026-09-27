@@ -1,10 +1,18 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
-import { initializeApp } from 'firebase-admin/app';
+import { getApps, initializeApp } from 'firebase-admin/app';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { HttpsError, onCall, onRequest } from 'firebase-functions/v2/https';
 import { defineSecret, defineString } from 'firebase-functions/params';
+export {
+  cleanupUnreferencedR2Assets,
+  createR2UploadIntent,
+  finalizeR2AssetUpload,
+  getR2OwnerTemporaryLink,
+  getR2SharedTemporaryLink,
+  touchR2AssetReferences,
+} from './r2Storage';
 
-initializeApp();
+if (getApps().length === 0) initializeApp();
 
 const db = getFirestore();
 const dropboxAppKey = defineSecret('DROPBOX_APP_KEY');

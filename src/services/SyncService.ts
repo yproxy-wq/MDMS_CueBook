@@ -26,6 +26,8 @@ export interface TimerSyncData {
   pdfPage?: number;
   /** Generated PDF page-image asset. The child view exchanges this ID for a short-lived URL. */
   pdfAssetId?: string | null;
+  /** CueBook R2 asset ID. The child view exchanges it for a capability-scoped short-lived URL. */
+  r2AssetId?: string | null;
   pdfPageCount?: number | null;
   lastUpdated?: any; // eslint-disable-line @typescript-eslint/no-explicit-any
   lapTimes?: number[] | null;

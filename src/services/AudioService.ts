@@ -1,6 +1,7 @@
 
-import { SoundConfig, SoundType } from '../types';
+import { FadeCurve, SoundConfig, SoundType } from '../types';
 import { networkMonitor } from './NetworkMonitor';
+import { createFadeCurve, normalizeFadeCurve } from '../utils/fadeCurve';
 
 class AudioService {
   private ctx: AudioContext | null = null;
@@ -63,6 +64,39 @@ class AudioService {
     this.bgmGain.connect(this.masterGain);
     this.seGain.connect(this.masterGain);
     this.masterGain.connect(this.ctx.destination);
+  }
+
+  private scheduleFadeIn(gain: GainNode, targetVolume: number, duration: number, curve?: FadeCurve) {
+    const now = this.ctx!.currentTime;
+    const param = gain.gain;
+    param.cancelScheduledValues(now);
+    param.setValueAtTime(0, now);
+    if (duration <= 0) {
+      param.setValueAtTime(targetVolume, now);
+      return;
+    }
+    if (normalizeFadeCurve(curve) === 'linear') {
+      param.linearRampToValueAtTime(targetVolume, now + duration);
+      return;
+    }
+    param.setValueCurveAtTime(createFadeCurve(curve, 0, targetVolume), now, duration);
+  }
+
+  private scheduleFadeOut(gain: GainNode, duration: number, curve?: FadeCurve) {
+    const now = this.ctx!.currentTime;
+    const param = gain.gain;
+    param.cancelScheduledValues(now);
+    if (duration <= 0) {
+      param.setValueAtTime(0, now);
+      return;
+    }
+    if (normalizeFadeCurve(curve) === 'linear') {
+      param.linearRampToValueAtTime(0, now + duration);
+      return;
+    }
+    const currentVolume = Math.max(0, param.value);
+    param.setValueAtTime(currentVolume, now);
+    param.setValueCurveAtTime(createFadeCurve(curve, currentVolume, 0), now, duration);
   }
 
   private async fetchAndDecode(url: string): Promise<AudioBuffer | null> {
@@ -455,8 +489,7 @@ class AudioService {
            source.connect(gain);
            gain.connect(this.seGain!);
 
-           gain.gain.setValueAtTime(0, this.ctx!.currentTime);
-           gain.gain.linearRampToValueAtTime(targetVolume, this.ctx!.currentTime + fadeIn);
+           this.scheduleFadeIn(gain, targetVolume, fadeIn, sound.fadeInCurve);
 
            source.start(0, sound.startTime || 0);
            this.activeNodes.set(instanceKey, {
@@ -489,9 +522,7 @@ class AudioService {
     if (sound.type === SoundType.BGM) gain.connect(this.bgmGain!);
     else gain.connect(this.seGain!);
 
-    gain.gain.cancelScheduledValues(this.ctx!.currentTime);
-    gain.gain.setValueAtTime(0, this.ctx!.currentTime);
-    gain.gain.linearRampToValueAtTime(targetVolume, this.ctx!.currentTime + fadeIn);
+    this.scheduleFadeIn(gain, targetVolume, fadeIn, sound.fadeInCurve);
 
     this.activeNodes.set(instanceKey, { 
       element,
@@ -517,6 +548,7 @@ class AudioService {
     } catch (err) {
       console.warn("Audio play failed:", err);
       this.activeNodes.delete(instanceKey);
+      throw err;
     }
   }
 
@@ -538,8 +570,7 @@ class AudioService {
       const fadeOut = config.fadeOutEnabled ? (config.fadeOutDuration ?? 3.0) : 0;
       
       try {
-        gain.gain.cancelScheduledValues(this.ctx!.currentTime);
-        gain.gain.linearRampToValueAtTime(0, this.ctx!.currentTime + fadeOut);
+        this.scheduleFadeOut(gain, fadeOut, config.fadeOutCurve);
         
         setTimeout(() => {
           const currentNode = this.activeNodes.get(key);

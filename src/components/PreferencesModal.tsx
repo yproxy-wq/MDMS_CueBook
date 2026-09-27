@@ -343,13 +343,13 @@ const PreferencesModal: React.FC<PreferencesModalProps> = React.memo(({ isOpen, 
                        type="range" 
                        min="16" 
                        max="24" 
-                       step="1"
-                       value={scenario.scriptFontSize || 18} 
-                       onChange={(e) => onUpdateScenario({ scriptFontSize: parseInt(e.target.value, 10) })}
+                       step="0.1"
+                       value={scenario.scriptFontSize ?? 21.3}
+                       onChange={(e) => onUpdateScenario({ scriptFontSize: parseFloat(e.target.value) })}
                        className="w-full sm:w-32 accent-white bg-white/10 h-1.5 rounded-lg appearance-none cursor-pointer"
                      />
                      <span className="text-xs font-mono font-bold text-white bg-white/5 px-2 py-1 rounded border border-white/10 min-w-[3.5rem] text-center">
-                       {scenario.scriptFontSize || 18}px
+                       {scenario.scriptFontSize ?? 21.3}px
                      </span>
                    </div>
                  </div>

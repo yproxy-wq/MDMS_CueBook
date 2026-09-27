@@ -10,6 +10,7 @@ import {
 import { htmlToMarkdown, renderMarkdown } from '../../utils/markdown';
 import { ImageResource } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
+import { OwnerMediaImage } from '../OwnerMediaImage';
 
 interface EasyEditorBlockProps {
   initialContent: string;
@@ -1017,7 +1018,7 @@ export const EasyEditorBlock: React.FC<EasyEditorBlockProps> = ({
                           </div>
                         ) : (
                           img.url ? (
-                            <img src={img.url} alt={img.name} className="w-full h-full object-cover opacity-50 group-hover:opacity-100 transition-opacity" />
+                            <OwnerMediaImage source={img.url} alt={img.name} className="w-full h-full object-cover opacity-50 group-hover:opacity-100 transition-opacity" />
                           ) : null
                         )}
                         <div className="absolute inset-x-0 bottom-0 p-2 bg-black/80 backdrop-blur-md translate-y-full group-hover:translate-y-0 transition-transform">

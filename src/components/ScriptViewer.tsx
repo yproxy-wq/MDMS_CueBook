@@ -1,21 +1,22 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Phase, Scenario, Character, ScriptBlock } from '../types';
-import { CheckSquare, Users, UserCircle, Plus, Minus, Check, ChevronRight, ChevronDown, ChevronUp, BookOpen, FileText, ExternalLink, Share, Edit3, Trash2, X } from 'lucide-react';
+import { Phase, Scenario, ScriptBlock } from '../types';
+import { CheckSquare, Plus, Minus, ChevronDown, ChevronUp, BookOpen, FileText, ExternalLink, Share, Edit3, Trash2, X, MonitorUp } from 'lucide-react';
 import { renderMarkdown } from '../utils/markdown';
+import { OutlineBlock } from './OutlineBlock';
+import { parseOutlineNodes } from '../utils/scriptOutline';
 import { QuickNote } from './QuickNote';
+import { PlayerTextPresentation } from './PlayerTextPresentation';
+import { isPlayerTextBlock, selectPlayerTextBlocks } from '../utils/playerTextPresentation';
+import { useOwnerMediaUrl } from '../hooks/useOwnerMediaUrl';
+import { isR2AssetUrl } from '../services/R2AssetService';
 
 interface ScriptViewerProps {
   phase: Phase;
   scenario: Scenario;
   scenarioTitle?: string;
-  characters: Character[];
-  onUpdateCharacter?: (charId: string, updates: Partial<Character>) => void;
   onToggleChecklist?: (phaseId: string, index: number) => void;
-  activeTab?: 'guide' | 'characters';
-  onTabChange?: (tab: 'guide' | 'characters') => void;
-  onOpenHandout?: (charId: string) => void;
   onShowImage?: (imageId: string | null) => void;
   activeImageId?: string | null;
   isPreviewing?: boolean;
@@ -25,13 +26,14 @@ interface ScriptViewerProps {
   onUpdateScenario?: (updates: Partial<Scenario>) => void;
 }
 
-const FLAG_COLORS = ['#3b82f6', '#ef4444', '#facc15'];
+const EMPTY_PLAYER_TEXT_IDS: ReadonlySet<string> = new Set();
 
 const ImageBlock: React.FC<{ 
   content: string; 
   label?: string;
   onOpenSync?: () => void;
 }> = React.memo(({ content, label, onOpenSync }) => {
+  const displayUrl = useOwnerMediaUrl(content);
   return (
     <div className="w-full bg-black/40 rounded-xl border border-white/10 overflow-hidden flex flex-col shadow-2xl relative z-10 group/img">
       <div className="px-4 py-2 bg-white/5 border-b border-white/5 flex items-center justify-between gap-2">
@@ -49,9 +51,9 @@ const ImageBlock: React.FC<{
         )}
       </div>
       <div className="p-4 flex items-center justify-center bg-[#1a1a1a]">
-        {content ? (
+        {displayUrl ? (
           <img 
-            src={content} 
+            src={displayUrl} 
             className="max-w-full h-auto rounded shadow-lg transition-transform duration-500 group-hover/img:scale-[1.01]" 
             alt={label || "Reference Image"} 
             referrerPolicy="no-referrer" 
@@ -74,6 +76,7 @@ const PdfBlock: React.FC<{
 }> = React.memo(({ content, label, page = 1, onPageChange, onOpenSync }) => {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const resolvedContentUrl = useOwnerMediaUrl(content);
 
   useEffect(() => {
     if (content.startsWith('data:application/pdf;base64,')) {
@@ -110,15 +113,17 @@ const PdfBlock: React.FC<{
   }, [content]);
 
   const isDataUri = content.startsWith('data:');
-  const displayUrl = blobUrl || (!isDataUri ? content : null);
+  const isR2Source = isR2AssetUrl(content);
+  const displayUrl = blobUrl || (!isDataUri ? resolvedContentUrl : null);
   
   const fullUrl = useMemo(() => {
     if (!displayUrl) return null;
     if (isDataUri) return `${displayUrl}#navpanes=0&view=Fit&zoom=page-fit&page=${page}`;
+    if (isR2Source) return `${displayUrl}#navpanes=0&view=Fit&zoom=page-fit&page=${page}`;
     
     // Dropbox etc
     return `https://docs.google.com/viewer?url=${encodeURIComponent(displayUrl)}&embedded=true&page=${page}&zoom=page-fit`;
-  }, [displayUrl, page, isDataUri]);
+  }, [displayUrl, page, isDataUri, isR2Source]);
 
   return (
     <div className="w-full min-h-[400px] h-[600px] md:h-[850px] bg-black/40 rounded-xl border border-white/10 overflow-hidden flex flex-col group/pdf shadow-2xl relative z-10">
@@ -232,10 +237,27 @@ type ProcessedBlock = ScriptBlock & {
 // Sub-component for individual blocks to optimize with React.memo
 const ScriptBlockItem: React.FC<{ 
   block: ProcessedBlock, 
-  renderBlock: (block: ProcessedBlock) => React.ReactNode 
-}> = React.memo(({ block, renderBlock }) => {
+  renderBlock: (block: ProcessedBlock) => React.ReactNode,
+  isSelectedForPlayer: boolean,
+  onTogglePlayerText: (blockId: string) => void,
+}> = React.memo(({ block, renderBlock, isSelectedForPlayer, onTogglePlayerText }) => {
+  const canShowToPlayer = isPlayerTextBlock(block);
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+    <div className="script-block-item relative animate-in fade-in slide-in-from-bottom-2 duration-500">
+      {canShowToPlayer && (
+        <button
+          type="button"
+          aria-label={(isSelectedForPlayer ? 'プレイヤー表示から外す: ' : 'プレイヤー表示に追加: ') + (block.label || block.id)}
+          aria-pressed={isSelectedForPlayer}
+          onClick={() => onTogglePlayerText(block.id)}
+          className={isSelectedForPlayer
+            ? 'absolute right-2 top-2 z-20 flex min-h-11 items-center gap-1 rounded-lg border border-sky-300/45 bg-sky-500/20 px-2.5 text-[10px] font-black text-sky-100 shadow-lg'
+            : 'absolute right-2 top-2 z-20 flex min-h-11 items-center gap-1 rounded-lg border border-white/10 bg-black/55 px-2.5 text-[10px] font-black text-white/50 backdrop-blur transition-colors hover:border-sky-300/35 hover:text-sky-100'}
+        >
+          <MonitorUp size={14} />
+          {isSelectedForPlayer ? '選択中' : 'PL表示'}
+        </button>
+      )}
       {renderBlock(block)}
     </div>
   );
@@ -245,161 +267,64 @@ const ScriptViewer: React.FC<ScriptViewerProps> = React.memo(({
   phase, 
   scenario, 
   scenarioTitle,
-  characters, 
-  onUpdateCharacter, 
   onToggleChecklist, 
-  activeTab = 'guide',
-  onTabChange,
-  onOpenHandout,
   onShowImage,
   activeImageId,
   isPreviewing,
   pdfPageStates,
   onSetPdfPageState,
   onOpenSync,
-  onUpdateScenario
+  onUpdateScenario,
 }) => {
-  const [foldedNodes, setFoldedNodes] = useState<Set<string>>(new Set());
   const [isChecklistFolded, setIsChecklistFolded] = useState(false);
+  const activeTab = 'guide' as const;
   const [isEditingChecklist, setIsEditingChecklist] = useState(false);
   const [editingChecklists, setEditingChecklists] = useState<string[]>([]);
+  const [playerTextSelection, setPlayerTextSelection] = useState<{ phaseId: string; ids: Set<string> }>({
+    phaseId: phase.id,
+    ids: new Set(),
+  });
+  const [playerPresentationPhaseId, setPlayerPresentationPhaseId] = useState<string | null>(null);
   const scriptContentRef = useRef<HTMLDivElement>(null);
+  const playerTextSelectedIds = useMemo(
+    () => playerTextSelection.phaseId === phase.id ? playerTextSelection.ids : EMPTY_PLAYER_TEXT_IDS,
+    [phase.id, playerTextSelection],
+  );
+  const selectedPlayerTextBlocks = useMemo(
+    () => selectPlayerTextBlocks(phase, playerTextSelectedIds),
+    [phase, playerTextSelectedIds],
+  );
 
-  // Swipe Gestures for Mobile and Tablet Layout integration
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    const target = e.target as HTMLElement | null;
-    // Prevent tab swipe if touch started inside table or scrollable block
-    if (target && (target.closest('table') || target.closest('.overflow-x-auto') || target.closest('input') || target.closest('textarea'))) {
-      touchStartRef.current = null;
-      return;
-    }
-    const t = e.touches[0];
-    touchStartRef.current = { x: t.clientX, y: t.clientY };
-  }, []);
-
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (!touchStartRef.current) return;
-    const t = e.changedTouches[0];
-    const diffX = t.clientX - touchStartRef.current.x;
-    const diffY = t.clientY - touchStartRef.current.y;
-    touchStartRef.current = null;
-
-    // Strict horizontal swipe with offset threshold
-    if (Math.abs(diffX) > 60 && Math.abs(diffY) < 40) {
-      if (diffX > 0) {
-        if (activeTab === 'characters') {
-          onTabChange?.('guide');
-        }
-      } else {
-        if (activeTab === 'guide') {
-          onTabChange?.('characters');
-        } else if (activeTab === 'characters') {
-          onTabChange?.('guide');
-        }
-      }
-    }
-  }, [activeTab, onTabChange]);
+  const togglePlayerTextSelection = useCallback((blockId: string) => {
+    setPlayerTextSelection((previous) => {
+      const next = previous.phaseId === phase.id ? new Set(previous.ids) : new Set<string>();
+      if (next.has(blockId)) next.delete(blockId);
+      else next.add(blockId);
+      return { phaseId: phase.id, ids: next };
+    });
+  }, [phase.id]);
 
   // Performance: For very long scripts, we might want to limit visible blocks or use deferred rendering
-  const [visibleCount, setVisibleCount] = useState(15); 
-  const prevPhaseIdRef = useRef(phase.id);
-  const prevPdfFingerprintRef = useRef<string>('');
-
-  // Fingerprint of all PDFs in the current phase to detect if we can persist the view
-  const pdfFingerprint = useMemo(() => {
-    return (phase.scriptBlocks || [])
-      .filter(b => b.type === 'pdf')
-      .map(b => b.content)
-      .sort()
-      .join('|');
-  }, [phase.scriptBlocks]);
-
-  useEffect(() => {
-    if (phase.id !== prevPhaseIdRef.current) {
-      const isPersistentPdf = pdfFingerprint && pdfFingerprint === prevPdfFingerprintRef.current;
-      
-      // Only reset visible count and scroll if the PDF set has changed.
-      // Keeping the scroll position and visible count helps keep the iframe mounted and scroll-stable.
-      if (!isPersistentPdf) {
-        setVisibleCount(15);
-        if (scriptContentRef.current) {
-          scriptContentRef.current.scrollTop = 0;
-        }
-      }
-      
-      prevPhaseIdRef.current = phase.id;
-      prevPdfFingerprintRef.current = pdfFingerprint;
-    }
-  }, [phase.id, pdfFingerprint]);
+  const [visibleByPhase, setVisibleByPhase] = useState<Record<string, number>>({});
+  const visibleCount = visibleByPhase[phase.id] ?? 15;
+  const revealMore = useCallback(() => {
+    setVisibleByPhase(previous => ({
+      ...previous,
+      [phase.id]: (previous[phase.id] ?? 15) + 15,
+    }));
+  }, [phase.id]);
   
+  const revealRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const blocks = phase.scriptBlocks || [];
-    const totalBlocks = blocks.length;
-    
-    // If we already have more blocks visible than total, no need to reset or wait
-    if (visibleCount >= totalBlocks) return;
-
-    const interval = setInterval(() => {
-        setVisibleCount(prev => {
-          if (prev >= totalBlocks) {
-            clearInterval(interval);
-            return prev;
-          }
-          return prev + 15;
-        });
-      }, 30);
-      return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase.id, (phase.scriptBlocks || []).length]); 
-
-  const updateTokens = useCallback((charId: string, delta: number) => {
-    const char = characters.find(c => c.id === charId);
-    if (char && onUpdateCharacter) {
-      onUpdateCharacter(charId, { tokens: Math.max(0, char.tokens + delta) });
-    }
-  }, [characters, onUpdateCharacter]);
-
-  const toggleFlag = useCallback((charId: string, index: number) => {
-    const char = characters.find(charItem => charItem.id === charId);
-    if (char && onUpdateCharacter) {
-      const newFlags = [...char.flags];
-      newFlags[index] = !newFlags[index];
-      onUpdateCharacter(charId, { flags: newFlags });
-    }
-  }, [characters, onUpdateCharacter]);
-
-  const toggleFold = useCallback((id: string) => {
-    setFoldedNodes(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }, []);
-
-  const parseOutline = useCallback((text: string) => {
-    const lines = text.split('\n');
-    return lines.map((line, i) => {
-      const match = line.match(/^(\s*)-\s+(.*)/);
-      if (match) {
-        return { id: `item-${i}`, text: match[2], depth: Math.floor(match[1].length / 2) };
-      }
-      const headerMatch = line.match(/^(#{1,3})\s+(.*)/);
-      if (headerMatch) {
-        return { id: `item-${i}`, text: headerMatch[2], depth: headerMatch[1].length - 1 };
-      }
-      const trimmed = line.trim();
-      return trimmed ? { id: `item-${i}`, text: trimmed, depth: 0 } : null;
-    }).filter(Boolean) as { id: string, text: string, depth: number }[];
-  }, []);
-
-  const isNodeHidden = useCallback((nodes: { id: string, text: string, depth: number }[], idx: number) => {
-    for (let i = idx - 1; i >= 0; i--) {
-      if (nodes[i].depth < nodes[idx].depth && foldedNodes.has(nodes[i].id)) return true;
-    }
-    return false;
-  }, [foldedNodes]);
+    const sentinel = revealRef.current;
+    const root = scriptContentRef.current;
+    if (!sentinel || !root || visibleCount >= (phase.scriptBlocks?.length || 0)) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) revealMore();
+    }, { root, rootMargin: '600px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [phase.id, phase.scriptBlocks?.length, visibleCount, activeTab, revealMore]);
 
   const checklistPos = scenario.checklistPosition || 'bottom';
 
@@ -527,7 +452,10 @@ const ScriptViewer: React.FC<ScriptViewerProps> = React.memo(({
     // Replace [[ID]] with a button
     // The regex matches [[AnythingNotInBrackets]]
     return result.replace(/\[\[([^\]]+)\]\]/g, (match, id) => {
-      const isActive = activeImageId === id;
+      const safeId = String(id).replace(/[&<>"']/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      })[character]!);
+      const isActive = false;
       // Brutalist elegant button style
       return `<button 
         class="image-sync-btn px-2 py-0.5 mx-1 rounded border transition-all duration-300 font-mono text-[10px] font-bold cursor-pointer inline-flex items-center gap-1.5
@@ -535,22 +463,27 @@ const ScriptViewer: React.FC<ScriptViewerProps> = React.memo(({
             ? 'bg-purple-600 border-purple-400 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]' 
             : 'bg-white/5 border-white/10 text-white/40 hover:text-white/80 hover:border-white/30 hover:bg-white/10'}
         " 
-        data-img-id="${id}"
-        title="Sync Image: ${id}"
+        data-img-id="${safeId}"
+        title="Sync Image: ${safeId}"
       >
         <span class="w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white animate-pulse' : 'bg-white/20'}"></span>
-        ${id}
+        ${safeId}
       </button>`;
     });
-  }, [activeImageId]);
+  }, []);
 
-  const processedHtmlMap = useRef<Record<string, { raw: string, html: string }>>({});
+
+  useEffect(() => {
+    scriptContentRef.current?.querySelectorAll<HTMLButtonElement>('.image-sync-btn').forEach(button => {
+      button.setAttribute('aria-pressed', String(button.dataset.imgId === activeImageId));
+    });
+  }, [activeImageId, phase.id, phase.scriptBlocks, visibleCount, activeTab]);
 
   const memoizedBlocks = useMemo(() => {
     const pdfContentCounts: Record<string, number> = {};
 
-    return (phase.scriptBlocks || []).map(block => {
-      let stableKey = block.id;
+    return (phase.scriptBlocks || []).slice(0, visibleCount).map(block => {
+      let stableKey = JSON.stringify([scenario.id, phase.id, block.id]);
 
       if (block.type === 'pdf') {
         const content = block.content;
@@ -561,14 +494,7 @@ const ScriptViewer: React.FC<ScriptViewerProps> = React.memo(({
       }
 
       if (block.type === 'markdown') {
-        const cache = processedHtmlMap.current[block.id];
-        let baseHtml = '';
-        if (cache && cache.raw === block.content) {
-          baseHtml = cache.html;
-        } else {
-          baseHtml = renderMarkdown(block.content);
-          processedHtmlMap.current[block.id] = { raw: block.content, html: baseHtml };
-        }
+        const baseHtml = renderMarkdown(block.content);
 
         return {
           ...block,
@@ -579,7 +505,7 @@ const ScriptViewer: React.FC<ScriptViewerProps> = React.memo(({
         return {
           ...block,
           stableKey,
-          nodes: parseOutline(block.content)
+          nodes: parseOutlineNodes(block.content)
         };
       } else {
         return {
@@ -588,7 +514,7 @@ const ScriptViewer: React.FC<ScriptViewerProps> = React.memo(({
         };
       }
     });
-  }, [phase.scriptBlocks, parseOutline, processScriptHtml]);
+  }, [scenario.id, phase.id, phase.scriptBlocks, processScriptHtml, visibleCount]);
 
   const renderBlock = useCallback((block: ProcessedBlock) => {
     switch (block.type) {
@@ -606,40 +532,8 @@ const ScriptViewer: React.FC<ScriptViewerProps> = React.memo(({
             />
           </div>
         );
-      case 'outline': {
-        const nodes = block.nodes || [];
-        return (
-          <div className="space-y-1 font-sans">
-            {block.label && (
-              <div className="mb-4 text-[10px] font-bold font-cinzel text-white/50 uppercase tracking-widest">
-                {block.label}
-              </div>
-            )}
-            {nodes.map((node, idx) => {
-              if (isNodeHidden(nodes, idx)) return null;
-              const hasChildren = nodes[idx + 1] && nodes[idx + 1].depth > node.depth;
-              const isFolded = foldedNodes.has(node.id);
-              return (
-                <div 
-                  key={node.id} 
-                  className="flex items-start gap-2 group/node"
-                  style={{ paddingLeft: `${node.depth * 20}px` }}
-                >
-                  <button 
-                    onClick={() => toggleFold(node.id)}
-                    className={`mt-1 w-4 h-4 flex items-center justify-center transition-all ${hasChildren ? 'text-white/65 hover:text-white' : 'invisible'}`}
-                  >
-                    {isFolded ? <ChevronRight size={14}/> : <ChevronDown size={14}/>}
-                  </button>
-                  <div className="flex-1 py-1 px-3 bg-white/[0.02] border border-white/5 rounded-md text-[13px] md:text-[14px] leading-relaxed text-white group-hover/node:bg-white/[0.04] transition-all script-text-dynamic">
-                    {node.text}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        );
-      }
+      case 'outline':
+        return <OutlineBlock key={JSON.stringify([scenario.id, phase.id, block.id, block.content])} nodes={block.nodes || []} label={block.label} />;
       case 'pdf': {
         const matchedResource = (scenario.images || []).find(r => r.id === block.content);
         const resolvedUrl = matchedResource ? matchedResource.url : block.content;
@@ -662,7 +556,7 @@ const ScriptViewer: React.FC<ScriptViewerProps> = React.memo(({
       default:
         return null;
     }
-  }, [foldedNodes, isNodeHidden, toggleFold, scenario.images, pdfPageStates, onSetPdfPageState, onOpenSync]);
+  }, [scenario.id, phase.id, scenario.images, pdfPageStates, onSetPdfPageState, onOpenSync]);
 
   const handleSaveChecklist = useCallback(() => {
     const cleaned = editingChecklists.map(c => c.trim()).filter(Boolean);
@@ -674,30 +568,19 @@ const ScriptViewer: React.FC<ScriptViewerProps> = React.memo(({
         return p;
       });
       onUpdateScenario({ phases: updatedPhases });
-    } else {
-      phase.checklists = cleaned;
     }
     setIsEditingChecklist(false);
   }, [editingChecklists, onUpdateScenario, scenario.phases, phase]);
 
-  const scriptFontSize = scenario.scriptFontSize || 18;
+  const scriptFontSize = scenario.scriptFontSize;
 
   return (
     <div 
-      className="flex flex-col h-full bg-black/20 overflow-hidden relative pb-0"
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
+      className="script-viewer flex flex-col h-full bg-black/20 overflow-hidden relative pb-0"
+      style={{ '--script-font-size': scriptFontSize ? `${scriptFontSize}px` : undefined } as React.CSSProperties}
     >
-      <style dangerouslySetInnerHTML={{ __html: `
-        @media (min-width: 768px) {
-          .script-text-dynamic, .script-text-dynamic p, .script-text-dynamic li, .script-text-dynamic span, .script-text-dynamic div {
-            font-size: ${scriptFontSize}px !important;
-          }
-        }
-      ` }} />
-      <div className="flex border-b border-white/10 shrink-0 h-9 bg-black/40 backdrop-blur-md z-40">
+      <div className="flex border-b border-white/10 shrink-0 min-h-11 bg-black/40 backdrop-blur-md z-40">
         <button 
-          onClick={() => onTabChange?.('guide')}
           className={`flex-1 px-4 py-0 transition-all flex flex-col justify-center text-left border-r border-white/10 relative group min-w-0
             ${activeTab === 'guide' ? 'bg-white/5' : 'bg-transparent hover:bg-white/[0.02]'}
           `}
@@ -710,34 +593,49 @@ const ScriptViewer: React.FC<ScriptViewerProps> = React.memo(({
           </div>
           {activeTab === 'guide' && <div className="absolute left-0 top-0 bottom-0 w-1 opacity-50" style={{ backgroundColor: scenario.themeColor || '#ffffff' }} />}
         </button>
-        <button 
-          onClick={() => onTabChange?.('characters')}
-          className={`flex-1 px-4 py-0 transition-all flex flex-col justify-center text-left relative group min-w-0
-            ${activeTab === 'characters' ? 'bg-white/5' : 'bg-transparent hover:bg-white/[0.02]'}
-          `}
+        {/* キャラクター一覧は進行画面から撤廃 */}
+        <button
+          type="button"
+          aria-label="選択した本文をプレイヤー表示する"
+          disabled={selectedPlayerTextBlocks.length === 0}
+          onClick={() => setPlayerPresentationPhaseId(phase.id)}
+          className="flex min-h-11 shrink-0 items-center gap-1 border-l border-white/10 px-3 text-[10px] font-black text-white/60 transition-colors hover:bg-sky-500/10 hover:text-sky-100 disabled:cursor-not-allowed disabled:opacity-30"
         >
-          <div className="flex items-center gap-2 min-w-0">
-            <Users size={12} className={`shrink-0 transition-colors ${activeTab === 'characters' ? 'text-white' : 'text-white/60 group-hover:text-white/75'}`} />
-            <span className={`text-[10px] md:text-sm font-bold truncate font-cinzel tracking-tight uppercase tracking-wider transition-colors
-              ${activeTab === 'characters' ? 'text-white' : 'text-white/75 group-hover:text-white/85'}
-            `}>Characters</span>
-          </div>
-          {activeTab === 'characters' && <div className="absolute left-0 top-0 bottom-0 w-1 opacity-50" style={{ backgroundColor: scenario.themeColor || '#ffffff' }} />}
+          <MonitorUp size={14} />
+          <span className="hidden sm:inline">PL表示</span>
+          {selectedPlayerTextBlocks.length > 0 && <span className="font-mono text-sky-300">{selectedPlayerTextBlocks.length}</span>}
         </button>
       </div>
 
       <div className="flex-1 overflow-hidden relative">
-        {activeTab === 'guide' ? (
-          <div className="flex flex-col h-full overflow-hidden">
+        <div className="flex flex-col h-full overflow-hidden">
             {(checklistPos === 'top' || checklistPos === 'both') && renderChecklist('top')}
             <div ref={scriptContentRef} className="flex-1 overflow-y-auto p-4 md:p-6 md:pt-1 scrollbar-thin relative z-10 transition-all duration-300">
               <div className="space-y-8 md:space-y-12">
                 {memoizedBlocks.length > 0 ? (
                   memoizedBlocks.slice(0, visibleCount).map((block) => (
-                    <ScriptBlockItem key={block.stableKey || block.id} block={block} renderBlock={renderBlock} />
+                    <ScriptBlockItem
+                      key={block.stableKey || block.id}
+                      block={block}
+                      renderBlock={renderBlock}
+                      isSelectedForPlayer={playerTextSelectedIds.has(block.id)}
+                      onTogglePlayerText={togglePlayerTextSelection}
+                    />
                   ))
                 ) : phase.script ? (
                   <div className="prose prose-invert prose-red max-w-none animate-in fade-in duration-500">
+                    <button
+                      type="button"
+                      aria-label="プレイヤー表示に追加: この本文"
+                      aria-pressed={playerTextSelectedIds.has('legacy-script')}
+                      onClick={() => togglePlayerTextSelection('legacy-script')}
+                      className={playerTextSelectedIds.has('legacy-script')
+                        ? 'mb-2 flex min-h-11 items-center gap-1 rounded-lg border border-sky-300/45 bg-sky-500/20 px-2.5 text-[10px] font-black text-sky-100'
+                        : 'mb-2 flex min-h-11 items-center gap-1 rounded-lg border border-white/10 bg-black/55 px-2.5 text-[10px] font-black text-white/50 hover:border-sky-300/35 hover:text-sky-100'}
+                    >
+                      <MonitorUp size={14} />
+                      {playerTextSelectedIds.has('legacy-script') ? '選択中' : 'PL表示'}
+                    </button>
                     <div 
                       className="markdown-content font-sans text-white/90 leading-relaxed text-[13px] md:text-[14px] bg-white/[0.02] p-5 md:p-6 md:pt-4 rounded-xl border border-white/5 shadow-inner script-text-dynamic"
                       dangerouslySetInnerHTML={{ __html: processScriptHtml(renderMarkdown(phase.script)) }}
@@ -750,56 +648,21 @@ const ScriptViewer: React.FC<ScriptViewerProps> = React.memo(({
                   </div>
                 )}
               </div>
+              {visibleCount < (phase.scriptBlocks?.length || 0) && <div ref={revealRef} className="py-4">
+                <button type="button" className="min-h-11 px-4 text-sm text-white/70" onClick={revealMore}>続きを表示</button>
+              </div>}
             </div>
             {(checklistPos === 'bottom' || checklistPos === 'both') && renderChecklist('bottom')}
-          </div>
-        ) : (
-          <div className="h-full overflow-y-auto p-4 md:p-6 scrollbar-thin space-y-3">
-            {characters.map(char => (
-              <div 
-                key={char.id} 
-                className="p-4 bg-white/[0.02] border border-white/5 rounded-xl flex items-start gap-4 hover:bg-white/[0.04] transition-all"
-                style={{ borderLeftColor: char.color, borderLeftWidth: '3px' }}
-              >
-                <div className="shrink-0">
-                  <UserCircle size={32} style={{ color: char.color || '#fff' }} className="drop-shadow-md" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 lg:gap-4 items-start lg:items-center">
-                    <div className="flex flex-col truncate">
-                      <span className="font-bold text-[13px] text-white truncate">{char.name}</span>
-                      <span className="text-[9px] text-white/30 uppercase tracking-tighter">{char.role}</span>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                       <button 
-                         onClick={() => onOpenHandout?.(char.id)}
-                         className="p-1 px-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20 transition-all flex items-center gap-1.5"
-                         title="Share Individual Notification"
-                       >
-                         <ExternalLink size={12} />
-                         <span className="text-[9px] font-bold font-cinzel">個別通知</span>
-                       </button>
-                       <div className="flex items-center gap-1.5 bg-black/40 px-2 py-1 rounded-lg border border-white/5">
-                          <button onClick={() => updateTokens(char.id, -1)} className="text-white/20 hover:text-white transition-colors"><Minus size={12}/></button>
-                          <span className="text-xs font-mono font-bold text-amber-500 tabular-nums">{char.tokens}</span>
-                          <button onClick={() => updateTokens(char.id, 1)} className="text-white/20 hover:text-white transition-colors"><Plus size={12}/></button>
-                       </div>
-                       <div className="flex gap-1">
-                         {[0, 1, 2].map(idx => (
-                           <button key={idx} onClick={() => toggleFlag(char.id, idx)} className={`w-6 h-6 rounded border ${char.flags?.[idx] ? 'bg-white/10' : 'border-white/5'}`} style={{ borderColor: char.flags?.[idx] ? FLAG_COLORS[idx] : undefined }}>
-                             <Check size={10} className={`mx-auto ${char.flags?.[idx] ? 'opacity-100' : 'opacity-0'}`} style={{ color: FLAG_COLORS[idx] }} />
-                           </button>
-                         ))}
-                       </div>
-                    </div>
-                  </div>
-                  {char.comment && <p className="mt-1 text-[10px] text-white/20 italic truncate">{char.comment}</p>}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        </div>
       </div>
+
+      {playerPresentationPhaseId === phase.id && selectedPlayerTextBlocks.length > 0 && (
+        <PlayerTextPresentation
+          entries={selectedPlayerTextBlocks}
+          phaseName={phase.name}
+          onClose={() => setPlayerPresentationPhaseId(null)}
+        />
+      )}
 
       {isEditingChecklist && createPortal(
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[900] p-4 animate-in fade-in duration-200">

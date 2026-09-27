@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Maximize2, Share } from 'lucide-react';
+import { useOwnerMediaUrl } from '../hooks/useOwnerMediaUrl';
 
 interface SyncThumbProps {
   timerLabel: string | null;
@@ -34,6 +35,7 @@ const SyncThumb: React.FC<SyncThumbProps> = ({
   isMobile
 }) => {
   const [displaySeconds, setDisplaySeconds] = React.useState(seconds);
+  const resolvedImageUrl = useOwnerMediaUrl(imageUrl);
 
   React.useEffect(() => {
     if (!isRunning || !startTime) {
@@ -96,7 +98,7 @@ const SyncThumb: React.FC<SyncThumbProps> = ({
           >
             {/* Background Image / PDF */}
             <div className="absolute inset-0 bg-black flex items-center justify-center">
-              {imageUrl ? (
+              {resolvedImageUrl ? (
                  resourceType === 'pdf' ? (
                    <div className="w-full h-full bg-neutral-800 flex items-center justify-center">
                       <div className="flex flex-col items-center gap-1 opacity-40">
@@ -105,9 +107,9 @@ const SyncThumb: React.FC<SyncThumbProps> = ({
                       </div>
                    </div>
                  ) : (
-                   imageUrl ? (
-                     <img 
-                      src={imageUrl} 
+                    resolvedImageUrl ? (
+                      <img 
+                       src={resolvedImageUrl} 
                       className="w-full h-full object-cover opacity-60" 
                       alt="Sync Preview" 
                       referrerPolicy="no-referrer"

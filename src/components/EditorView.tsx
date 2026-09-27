@@ -175,6 +175,7 @@ const EditorView: React.FC<EditorViewProps> = React.memo(({
           {activeTab === 'media' && (
             <MediaTab 
               scenario={scenario} 
+              user={user}
               onUpdate={updateScenario} 
             />
           )}

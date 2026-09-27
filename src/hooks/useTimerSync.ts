@@ -7,6 +7,8 @@ import { isQuotaExceeded } from '../lib/firebase';
 import { findSyncMediaResource, transformDropboxUrl } from '../utils/mediaHelper';
 import { createTimerSessionId, isSecureShareId } from '../utils/syncHelper';
 import { getPdfPageStateKey } from '../utils/pdfAssetHelper';
+import { selectSyncActiveMediaId, selectTimer } from '../utils/sessionSelectors';
+import { getR2AssetId, isR2Asset } from '../services/R2AssetService';
 
 interface LastSyncTracker {
   time: number;
@@ -33,6 +35,7 @@ interface LastSyncTracker {
   lapFontSize?: 'small' | 'medium' | 'large';
   timerLabelText?: string;
   pdfAssetId?: string | null;
+  r2AssetId?: string | null;
   pdfPage?: number | null;
 }
 
@@ -43,8 +46,8 @@ export function useTimerSync(
   user: User | null,
   state: AppState,
   isEditorMode: boolean,
-  currentPhase: Phase | undefined,
-  activeTimerIndex: number,
+  timerTargetPhase: Phase | undefined,
+  selectedTimerIndex: number,
 ) {
   const [syncData, setSyncData] = useState<TimerSyncData | null>(null);
 
@@ -63,11 +66,11 @@ export function useTimerSync(
     const shareId = state.currentScenario.syncShareId;
     if (!user || !isSecureShareId(shareId)) return;
 
-    const activeTimer = currentPhase?.timers?.[activeTimerIndex] || currentPhase?.timers?.[0];
+    const activeTimer = selectTimer(timerTargetPhase, selectedTimerIndex);
     if (!activeTimer) return;
-
-    const timerState = state.timerStates[activeTimer.id];
-    if (!timerState) return;
+    const timerState = state.timerStates[activeTimer.id] || {
+      seconds: activeTimer.durationMinutes * 60, isRunning: false, startTime: null,
+    };
 
     const sessionId = createTimerSessionId(user.uid, shareId);
     
@@ -98,6 +101,7 @@ export function useTimerSync(
       lapFontSize: 'medium' as 'small' | 'medium' | 'large',
        timerLabelText: '',
        pdfAssetId: null,
+       r2AssetId: null,
        pdfPage: null,
        lapTexts: {},
     };
@@ -108,13 +112,13 @@ export function useTimerSync(
     if (isQuotaExceeded()) return;
 
     const secondsDiff = Math.abs(timerState.seconds - lastSync.seconds);
-    const currentImageId = state.syncConfig ? state.syncConfig.activeImageId : state.activeImageId;
-    const normalizedActiveImageId = currentImageId ? String(currentImageId).trim() : null;
+    const normalizedActiveImageId = selectSyncActiveMediaId(state.syncConfig, state.activeImageId);
     const currentMediaItem = findSyncMediaResource(state.currentScenario, normalizedActiveImageId);
     const currentPdfPage = currentMediaItem?.type === 'pdf'
       ? (state.pdfPageStates?.[getPdfPageStateKey(currentMediaItem)] || 1)
       : null;
-    const currentPdfAssetId = currentMediaItem?.type === 'pdf' ? currentMediaItem.assetId || null : null;
+    const currentPdfAssetId = currentMediaItem?.type === 'pdf' && !isR2Asset(currentMediaItem) ? currentMediaItem.assetId || null : null;
+    const currentR2AssetId = getR2AssetId(currentMediaItem);
     
     // Setup and evaluate current UI configurations locally
     const currentSyncTimerEnabled = state.syncConfig?.timerEnabled ?? true;
@@ -125,7 +129,7 @@ export function useTimerSync(
     const currentTimerForceHidden = state.syncConfig?.timerForceHidden ?? false;
     const currentLapDisplayMode = state.syncConfig?.lapDisplayMode || 'overlay';
     const currentLapDisplayPosition = state.syncConfig?.lapDisplayPosition || 'top';
-    const currentLapNotificationText = state.syncConfig?.lapNotificationText ?? activeTimer.lapNotificationText ?? '';
+    const currentLapNotificationText = state.syncConfig?.lapNotificationText ?? activeTimer?.lapNotificationText ?? '';
     const currentOverlayType = state.syncConfig?.overlayType || 'none';
     const currentOverlayIntensity = state.syncConfig?.overlayIntensity ?? 0.5;
     const currentTimerColor = state.syncConfig?.timerColor || 'white';
@@ -133,11 +137,11 @@ export function useTimerSync(
     const currentLapFontSize = state.syncConfig?.lapFontSize || 'medium';
     const currentTimerLabelText = state.syncConfig?.timerLabelText || '';
 
-    const currentLapTimesStr = JSON.stringify(activeTimer.lapTimes || []);
+    const currentLapTimesStr = JSON.stringify(activeTimer?.lapTimes || []);
     const lastLapTimesStr = JSON.stringify(lastSync.lapTimes || []);
     const lapTimesChanged = currentLapTimesStr !== lastLapTimesStr;
 
-    const currentLapTextsStr = JSON.stringify(activeTimer.lapTexts || {});
+    const currentLapTextsStr = JSON.stringify(activeTimer?.lapTexts || {});
     const lastLapTextsStr = JSON.stringify(lastSync.lapTexts || {});
     const lapTextsChanged = currentLapTextsStr !== lastLapTextsStr;
 
@@ -160,13 +164,14 @@ export function useTimerSync(
       currentLapFontSize !== lastSync.lapFontSize ||
        currentTimerLabelText !== lastSync.timerLabelText ||
        currentPdfAssetId !== lastSync.pdfAssetId ||
+       currentR2AssetId !== lastSync.r2AssetId ||
        currentPdfPage !== lastSync.pdfPage ||
        lapTimesChanged ||
       lapTextsChanged;
 
     const hasStatusChanged = 
       timerState.isRunning !== lastSync.isRunning ||
-      activeTimer.id !== lastSync.timerId ||
+      (activeTimer?.id || '') !== lastSync.timerId ||
       state.currentPhaseId !== lastSync.phaseId;
 
     const hasConfigChanged = configChanged || normalizedActiveImageId !== lastSync.imageId;
@@ -203,17 +208,18 @@ export function useTimerSync(
     const prepareDataToSync = (): TimerSyncData => ({
       scenarioId: state.currentScenario.id,
       phaseId: state.currentPhaseId,
-      timerId: activeTimer.id,
+      timerId: (activeTimer?.id || ''),
       remainingSeconds: timerState.seconds,
       isRunning: timerState.isRunning,
       startTime: timerState.startTime || null,
-      label: activeTimer.label || null,
+      label: activeTimer?.label || null,
       activeImageId: normalizedActiveImageId,
-      activeImageUrl: mediaItem?.assetId ? null : (mediaItem?.url ? transformDropboxUrl(mediaItem.url) : null),
+      activeImageUrl: currentPdfAssetId || currentR2AssetId ? null : (mediaItem?.url ? transformDropboxUrl(mediaItem.url) : null),
       activeImageName: mediaItem?.name || null,
       activeResourceType: mediaItem?.type || (normalizedActiveImageId ? 'image' : null),
       pdfPage: currentPdfPage,
       pdfAssetId: currentPdfAssetId,
+      r2AssetId: currentR2AssetId,
       pdfPageCount: mediaItem?.type === 'pdf' ? mediaItem.pageCount || null : null,
       syncTimerEnabled: currentSyncTimerEnabled,
       syncContentEnabled: currentSyncContentEnabled,
@@ -226,8 +232,8 @@ export function useTimerSync(
       videoDuration: state.syncConfig?.videoDuration ?? (remoteData?.videoDuration ?? 0),
       videoVolume: state.syncConfig?.videoVolume ?? (remoteData?.videoVolume ?? 1),
       videoLoop: state.syncConfig?.videoLoop ?? (remoteData?.videoLoop ?? false),
-      lapTimes: activeTimer.lapTimes || null,
-      lapTexts: activeTimer.lapTexts || null,
+      lapTimes: activeTimer?.lapTimes || null,
+      lapTexts: activeTimer?.lapTexts || null,
       lapDisplayMode: currentLapDisplayMode,
       lapDisplayPosition: currentLapDisplayPosition,
       lapNotificationText: currentLapNotificationText || null,
@@ -275,6 +281,7 @@ export function useTimerSync(
       return scenarioMatched && phaseMatched && timerMatched && runningMatched && timeMatched && 
               normalize(local.activeImageId) === normalize(remote.activeImageId) &&
               normalize(local.pdfAssetId) === normalize(remote.pdfAssetId) &&
+              normalize(local.r2AssetId) === normalize(remote.r2AssetId) &&
               numOrNull(local.pdfPage) === numOrNull(remote.pdfPage) &&
               numOrNull(local.pdfPageCount) === numOrNull(remote.pdfPageCount) &&
               (local.syncTimerEnabled ?? true) === (remote.syncTimerEnabled ?? true) &&
@@ -314,7 +321,7 @@ export function useTimerSync(
       time: now,
       seconds: timerState.seconds,
       isRunning: timerState.isRunning,
-      timerId: activeTimer.id,
+      timerId: (activeTimer?.id || ''),
       imageId: normalizedActiveImageId,
       phaseId: state.currentPhaseId,
       syncTimerEnabled: currentSyncTimerEnabled,
@@ -323,8 +330,8 @@ export function useTimerSync(
       timerPosition: currentTimerPosition,
       imageFit: currentImageFit,
       timerForceHidden: currentTimerForceHidden,
-      lapTimes: activeTimer.lapTimes || [],
-      lapTexts: activeTimer.lapTexts || {},
+      lapTimes: activeTimer?.lapTimes || [],
+      lapTexts: activeTimer?.lapTexts || {},
       lapDisplayMode: currentLapDisplayMode,
       lapDisplayPosition: currentLapDisplayPosition,
       lapNotificationText: currentLapNotificationText,
@@ -335,6 +342,7 @@ export function useTimerSync(
       lapFontSize: currentLapFontSize,
       timerLabelText: currentTimerLabelText,
       pdfAssetId: currentPdfAssetId,
+      r2AssetId: currentR2AssetId,
       pdfPage: currentPdfPage,
     };
 
@@ -360,11 +368,11 @@ export function useTimerSync(
   }, [
     state.timerStates, 
     state.currentPhaseId, 
-    activeTimerIndex, 
+    selectedTimerIndex,
     user, 
     isEditorMode, 
     state.currentScenario,
-    currentPhase?.timers, 
+    timerTargetPhase,
     state.activeImageId, 
     state.pdfPageStates,
     state.syncConfig,
@@ -375,11 +383,11 @@ export function useTimerSync(
     const shareId = state.currentScenario.syncShareId;
     if (!user || !isSecureShareId(shareId)) return;
     
-    const activeTimer = currentPhase?.timers?.[activeTimerIndex] || currentPhase?.timers?.[0];
+    const activeTimer = selectTimer(timerTargetPhase, selectedTimerIndex);
     if (!activeTimer) return;
-
-    const timerState = state.timerStates[activeTimer.id];
-    if (!timerState) return;
+    const timerState = state.timerStates[activeTimer.id] || {
+      seconds: activeTimer.durationMinutes * 60, isRunning: false, startTime: null,
+    };
 
     const sessionId = createTimerSessionId(user.uid, shareId);
     
@@ -388,24 +396,24 @@ export function useTimerSync(
       lastSyncCache[sessionId].time = 0;
     }
 
-    const currentImageId = state.syncConfig ? state.syncConfig.activeImageId : state.activeImageId;
-    const normalizedActiveImageId = currentImageId ? String(currentImageId).trim() : null;
+    const normalizedActiveImageId = selectSyncActiveMediaId(state.syncConfig, state.activeImageId);
     const mediaItem = findSyncMediaResource(state.currentScenario, normalizedActiveImageId);
 
     const dataToSync: TimerSyncData = {
       scenarioId: state.currentScenario.id,
       phaseId: state.currentPhaseId,
-      timerId: activeTimer.id,
+      timerId: (activeTimer?.id || ''),
       remainingSeconds: timerState.seconds,
       isRunning: timerState.isRunning,
       startTime: timerState.startTime || null,
-      label: activeTimer.label || null,
+      label: activeTimer?.label || null,
       activeImageId: normalizedActiveImageId,
-      activeImageUrl: mediaItem?.assetId ? null : (mediaItem?.url ? transformDropboxUrl(mediaItem.url) : null),
+      activeImageUrl: isR2Asset(mediaItem) || mediaItem?.assetId ? null : (mediaItem?.url ? transformDropboxUrl(mediaItem.url) : null),
       activeImageName: mediaItem?.name || null,
       activeResourceType: mediaItem?.type || (normalizedActiveImageId ? 'image' : null),
       pdfPage: mediaItem?.type === 'pdf' ? (state.pdfPageStates?.[getPdfPageStateKey(mediaItem)] || 1) : null,
-      pdfAssetId: mediaItem?.type === 'pdf' ? mediaItem.assetId || null : null,
+      pdfAssetId: mediaItem?.type === 'pdf' && !isR2Asset(mediaItem) ? mediaItem.assetId || null : null,
+      r2AssetId: getR2AssetId(mediaItem),
       pdfPageCount: mediaItem?.type === 'pdf' ? mediaItem.pageCount || null : null,
       syncTimerEnabled: state.syncConfig?.timerEnabled ?? (syncData?.syncTimerEnabled ?? true),
       syncContentEnabled: state.syncConfig?.contentEnabled ?? (syncData?.syncContentEnabled ?? true),
@@ -418,11 +426,11 @@ export function useTimerSync(
       videoDuration: state.syncConfig?.videoDuration ?? (syncData?.videoDuration ?? 0),
       videoVolume: state.syncConfig?.videoVolume ?? (syncData?.videoVolume ?? 1),
       videoLoop: state.syncConfig?.videoLoop ?? (syncData?.videoLoop ?? false),
-      lapTimes: activeTimer.lapTimes || null,
-      lapTexts: activeTimer.lapTexts || null,
+      lapTimes: activeTimer?.lapTimes || null,
+      lapTexts: activeTimer?.lapTexts || null,
       lapDisplayMode: state.syncConfig?.lapDisplayMode || syncData?.lapDisplayMode || 'overlay',
       lapDisplayPosition: state.syncConfig?.lapDisplayPosition || syncData?.lapDisplayPosition || 'top',
-      lapNotificationText: state.syncConfig?.lapNotificationText ?? activeTimer.lapNotificationText ?? null,
+      lapNotificationText: state.syncConfig?.lapNotificationText ?? activeTimer?.lapNotificationText ?? null,
       overlayType: state.syncConfig?.overlayType || syncData?.overlayType || 'none',
       overlayIntensity: state.syncConfig?.overlayIntensity ?? syncData?.overlayIntensity ?? 0.5,
       timerColor: state.syncConfig?.timerColor || syncData?.timerColor || 'white',

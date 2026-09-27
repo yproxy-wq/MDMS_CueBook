@@ -66,6 +66,9 @@ const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }
   const [pdfAssetError, setPdfAssetError] = useState<string | null>(null);
   const [pdfAssetLoading, setPdfAssetLoading] = useState(false);
   const [pdfAssetRefreshNonce, setPdfAssetRefreshNonce] = useState(0);
+  const [r2AssetUrl, setR2AssetUrl] = useState<string | null>(null);
+  const [r2AssetError, setR2AssetError] = useState<string | null>(null);
+  const [r2AssetRefreshNonce, setR2AssetRefreshNonce] = useState(0);
   const [data, setData] = useState<TimerSyncData | null>(null);
   const [loading, setLoading] = useState(true);
   const [displaySeconds, setDisplaySeconds] = useState(0);
@@ -210,8 +213,8 @@ const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }
     const idKey = data.activeImageId ? String(data.activeImageId).toLowerCase() : '';
     const nameKey = data.activeImageName ? String(data.activeImageName).toLowerCase() : '';
     const cleanNameKey = nameKey.replace(/\.[^/.]+$/, '');
-    return localPdfMap[idKey]?.url || localPdfMap[nameKey]?.url || localPdfMap[cleanNameKey]?.url || data.activeImageUrl || '';
-  }, [data, localPdfMap]);
+    return localPdfMap[idKey]?.url || localPdfMap[nameKey]?.url || localPdfMap[cleanNameKey]?.url || r2AssetUrl || data.activeImageUrl || '';
+  }, [data, localPdfMap, r2AssetUrl]);
 
   const processFiles = useCallback((files: FileList) => {
     const newMappings: Record<string, { url: string; name: string }> = {};
@@ -590,6 +593,42 @@ const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }
     };
   }, [data?.activeResourceType, data?.pdfAssetId, data?.pdfPage, pdfAssetRefreshNonce, session.isSecure, session.subSessionId, session.userId]);
 
+  useEffect(() => {
+    const assetId = data?.r2AssetId || null;
+    if (!assetId) {
+      setR2AssetUrl(null);
+      setR2AssetError(null);
+      return;
+    }
+    if (!session.isSecure) {
+      setR2AssetUrl(null);
+      setR2AssetError('安全な共有URLで子ウィンドウを開き直してください。');
+      return;
+    }
+
+    let cancelled = false;
+    let refreshTimer: number | undefined;
+    void import('../services/R2AssetService')
+      .then(({ getR2SharedTemporaryUrl }) => getR2SharedTemporaryUrl(session.userId, session.subSessionId, assetId))
+      .then((result) => {
+        if (cancelled) return;
+        setR2AssetUrl(result.url);
+        setR2AssetError(null);
+        refreshTimer = window.setTimeout(() => setR2AssetRefreshNonce((value) => value + 1), Math.max(60_000, result.expiresAt - Date.now() - 60_000));
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.warn('[R2 asset] Failed to obtain a shared temporary URL:', error);
+        setR2AssetUrl(null);
+        setR2AssetError('CueBookストレージの素材を取得できません。共有URLまたはアクセス権を確認してください。');
+      });
+
+    return () => {
+      cancelled = true;
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+    };
+  }, [data?.r2AssetId, r2AssetRefreshNonce, session.isSecure, session.subSessionId, session.userId]);
+
   if (loading) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#050505] text-white">
@@ -612,7 +651,7 @@ const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }
   const videoSrc = getActiveVideoSrc();
   const pdfSrc = getActivePdfSrc();
   const isVideoMissing = data.activeResourceType === 'video' && !videoSrc;
-  const hasImage = !!data.activeImageUrl || (data.activeResourceType === 'pdf' && (!!pdfSrc || !!data.pdfAssetId)) || (data.activeResourceType === 'video' && !!videoSrc);
+  const hasImage = !!data.activeImageUrl || !!r2AssetUrl || (data.activeResourceType === 'pdf' && (!!pdfSrc || !!data.pdfAssetId || !!data.r2AssetId)) || (data.activeResourceType === 'video' && !!videoSrc);
   const timerSize = data.timerSize || 'small';
   const timerPosition = data.timerPosition || 'bottom';
 
@@ -856,9 +895,9 @@ const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }
       {syncContentEnabled && (
         <div className="absolute inset-0 z-0 bg-black">
           <AnimatePresence mode="popLayout">
-            {(data.activeImageUrl || data.activeResourceType === 'pdf' || isVideoMissing || (data.activeResourceType === 'video' && videoSrc)) ? (
+            {(data.activeImageUrl || r2AssetUrl || data.activeResourceType === 'pdf' || isVideoMissing || (data.activeResourceType === 'video' && videoSrc)) ? (
                 <motion.div
-                  key={data.activeImageUrl || (videoSrc ? 'video-active' : 'video-missing')}
+                  key={r2AssetUrl || data.activeImageUrl || (videoSrc ? 'video-active' : 'video-missing')}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -961,11 +1000,11 @@ const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }
                     )
                   ) : (
                     (() => {
-                      const rawUrl = data.activeImageUrl || '';
+                      const rawUrl = r2AssetUrl || data.activeImageUrl || '';
                       const transformed = transformDropboxUrl(rawUrl);
                       const displayUrl = fallbackImageUrls[rawUrl] || transformed;
 
-                      return (
+                      return displayUrl ? (
                         <img 
                           src={displayUrl} 
                           alt="Sync View"
@@ -986,6 +1025,11 @@ const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }
                             }
                           }}
                         />
+                      ) : (
+                        <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-[#0a0a0c] p-8 text-center">
+                          <FileText size={40} className="text-sky-300" />
+                          <p className="text-sm text-white/70">{r2AssetError || '素材を読み込み中…'}</p>
+                        </div>
                       );
                     })()
                   )}

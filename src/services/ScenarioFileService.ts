@@ -30,7 +30,7 @@ export async function parseScenarioFile(file: File): Promise<Scenario> {
     content = await jsonFile.async('string');
   } else {
     // Backward compatibility: older CueBook versions may contain plain JSON.
-    content = new TextDecoder('utf-8').decode(bytes).replace(/^\\uFEFF/, '');
+    content = new TextDecoder('utf-8').decode(bytes).replace(/^\uFEFF/, '');
   }
   return validateAndMigrateScenario(JSON.parse(content));
 }

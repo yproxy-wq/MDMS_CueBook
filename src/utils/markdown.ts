@@ -1,50 +1,43 @@
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import { preprocessMarkdownForDetails } from './detailsMarkup';
+export { preprocessMarkdownForDetails } from './detailsMarkup';
 
-export const preprocessMarkdownForDetails = (md: string): string => {
-  if (!md || !md.includes('<details')) return md;
+const MAX_MARKDOWN_CACHE_CHARACTERS = 2_000_000;
+const markdownHtmlCache = new Map<string, string>();
+let markdownCacheCharacters = 0;
 
-  let processed = md;
-  let prev = '';
+const rememberRenderedMarkdown = (markdown: string, html: string) => {
+  const entryCharacters = markdown.length + html.length;
+  if (entryCharacters > MAX_MARKDOWN_CACHE_CHARACTERS) return;
 
-  const replaceDetails = (input: string): string => {
-    return input.replace(/<details([^>]*)>([\s\S]*?)<\/details>/gi, (match, attrs, content) => {
-      const summaryMatch = content.match(/^(\s*<summary[\s\S]*?<\/summary>)([\s\S]*)$/i);
-      if (summaryMatch) {
-        const summary = summaryMatch[1].trim();
-        const body = summaryMatch[2]
-          .replace(/(\r?\n\s*){2,}/g, '<br><br>')
-          .replace(/\r?\n/g, '<br>')
-          .replace(/^(<br>)+/, '')
-          .replace(/(<br>)+$/, '');
-        return `<details${attrs}>${summary}${body}</details>`;
-      } else {
-        const body = content
-          .replace(/(\r?\n\s*){2,}/g, '<br><br>')
-          .replace(/\r?\n/g, '<br>')
-          .replace(/^(<br>)+/, '')
-          .replace(/(<br>)+$/, '');
-        return `<details${attrs}>${body}</details>`;
-      }
-    });
-  };
-
-  while (processed !== prev) {
-    prev = processed;
-    processed = replaceDetails(processed);
+  while (markdownCacheCharacters + entryCharacters > MAX_MARKDOWN_CACHE_CHARACTERS) {
+    const oldest = markdownHtmlCache.entries().next().value as [string, string] | undefined;
+    if (!oldest) break;
+    markdownHtmlCache.delete(oldest[0]);
+    markdownCacheCharacters -= oldest[0].length + oldest[1].length;
   }
 
-  return processed;
+  markdownHtmlCache.set(markdown, html);
+  markdownCacheCharacters += entryCharacters;
 };
 
 export const renderMarkdown = (md: string): string => {
   if (!md) return '';
+  const cached = markdownHtmlCache.get(md);
+  if (cached !== undefined) {
+    markdownHtmlCache.delete(md);
+    markdownHtmlCache.set(md, cached);
+    return cached;
+  }
   const preprocessed = preprocessMarkdownForDetails(md);
   const rawHtml = marked.parse(preprocessed) as string;
-  return DOMPurify.sanitize(rawHtml, {
+  const sanitized = DOMPurify.sanitize(rawHtml, {
     ALLOWED_TAGS: ['b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del', 'code', 'pre', 'blockquote', 'hr', 'a', 'span', 'font', 'ul', 'ol', 'li', 'div', 'p', 'br', 'details', 'summary', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'img'],
-    ALLOWED_ATTR: ['href', 'title', 'target', 'style', 'color', 'class', 'src', 'alt']
+    ALLOWED_ATTR: ['href', 'title', 'target', 'style', 'color', 'class', 'src', 'alt', 'open']
   });
+  rememberRenderedMarkdown(md, sanitized);
+  return sanitized;
 };
 
 export const htmlToMarkdown = (html: string): string => {
@@ -139,7 +132,9 @@ export const htmlToMarkdown = (html: string): string => {
               if (c.nodeType === Node.ELEMENT_NODE && (c as HTMLElement).tagName.toLowerCase() === 'summary') {
                 return;
               }
-              contentNodes.push(processNode(c));
+              const wrapper = document.createElement('div');
+              wrapper.appendChild(c.cloneNode(true));
+              contentNodes.push(processNode(wrapper));
             });
             let bodyText = contentNodes.join('').trim();
             // Clean up double newlines inside details body to keep HTML block intact in marked

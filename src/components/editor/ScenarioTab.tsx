@@ -3,13 +3,15 @@ import React from 'react';
 import { Scenario, SyncConfig } from '../../types';
 import { Palette, Upload, Clock, Monitor, Layers, Type } from 'lucide-react';
 import { ColorPicker } from './ColorPicker';
+import { isSyncContentVisible, isSyncTimerVisible } from '../../utils/sessionSelectors';
 
 // サンプルデータを用いたライブプレビューコンポーネント
 const DummyPreview: React.FC<{
   config: SyncConfig;
   backgroundImage?: string;
 }> = React.memo(({ config, backgroundImage }) => {
-  const isVisible = config.contentEnabled;
+  const isVisible = isSyncContentVisible(config);
+  const isTimerVisible = isSyncTimerVisible(config);
 
   // サンプル画像。背景画像があればそれを使い、なければ雰囲気のあるミステリー調のイメージ
   const displayUrl = backgroundImage || "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=600&auto=format&fit=crop";
@@ -63,7 +65,7 @@ const DummyPreview: React.FC<{
         </div>
 
         {/* Timer Overlay */}
-        {config.timerEnabled && !config.timerForceHidden && (
+        {isTimerVisible && (
           <div 
             className={`absolute left-0 right-0 p-2 pointer-events-none z-20 flex ${config.timerPosition === 'bottom' ? 'bottom-0' : 'top-0'} justify-center`}
           >
@@ -87,7 +89,7 @@ const DummyPreview: React.FC<{
         )}
 
         {/* Dark gradient for timer readability */}
-        {config.timerEnabled && !config.timerForceHidden && isVisible && (
+        {isTimerVisible && isVisible && (
           <div className={`absolute inset-x-0 h-8 bg-gradient-to-${config.timerPosition === 'bottom' ? 't' : 'b'} from-black/60 to-transparent pointer-events-none ${config.timerPosition === 'bottom' ? 'bottom-0' : 'top-0'}`} />
         )}
 

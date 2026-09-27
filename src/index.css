@@ -8,3 +8,81 @@
   --radius-xl: 8px;
   --radius-2xl: 12px;
 }
+
+
+/* Tablet reading: explicit user size wins, otherwise 16pt at tablet widths. */
+.script-viewer { --script-font-size: 18px; }
+@media (min-width: 768px) { .script-viewer { --script-font-size: 21.333px; } }
+.script-viewer .script-text-dynamic,
+.script-viewer .script-text-dynamic :where(p, li, span, div) {
+  font-size: var(--script-font-size) !important;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.phase-tab { min-height: 48px; min-width: 120px; max-width: 240px; font-size: clamp(13px, 1.3vw, 16px); }
+.phase-tab-track { touch-action: pan-x; overscroll-behavior-x: contain; }
+.image-sync-btn[aria-pressed="true"] { background: #7e22ce; border-color: #c084fc; color: white; }
+
+/* The performance row uses the same controls at every tablet size, but lets
+   their density follow available width and height instead of overflowing. */
+.performance-control-bar { container-type: inline-size; }
+.performance-control-bar__content { min-width: 0; }
+.performance-control-bar__primary { min-width: 0; }
+.performance-control-bar__sync { min-width: 0; }
+
+@container (max-width: 640px) {
+  .performance-control-bar { padding-inline: 8px; }
+  .performance-control-bar__content,
+  .performance-control-bar__primary,
+  .performance-control-bar__primary > div,
+  .sync-quick-controls__actions { gap: 6px; }
+  .performance-control-bar__timer { padding-inline: 8px; }
+  .sync-quick-controls__actions > div { display: none; }
+  .sync-quick-controls__actions button { padding-inline: 8px; }
+}
+
+@media (min-width: 768px) and (max-height: 700px) {
+  .tablet-reading-phase-nav { height: 56px; min-height: 56px; }
+  .tablet-reading-phase-nav .phase-tab { min-height: 44px; }
+  .performance-control-bar { padding-block: 4px; }
+  .performance-control-bar__timer { padding-block: 5px; }
+}
+
+@media (pointer: coarse) {
+  .script-viewer button, .script-viewer summary { min-height: 44px; }
+  .script-viewer summary { padding-block: 8px; }
+  .phase-tab { min-height: 52px; }
+  .script-viewer { backdrop-filter: none; }
+}
+@media (max-height: 700px) {
+  .phase-tab { padding-block: 4px; }
+  .script-viewer .markdown-content { padding: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .phase-tab, .script-viewer * { animation: none !important; scroll-behavior: auto !important; }
+}
+
+/* 縦タブレットではGM本文を優先するため、上部操作群とフェーズ列を圧縮する。 */
+.tablet-reading-toolbar,
+.tablet-reading-phase-nav {
+  transition: height 180ms ease, max-height 180ms ease, opacity 150ms ease, border-color 150ms ease;
+}
+
+.tablet-reading-toolbar--compact .tablet-reading-toolbar > header {
+  height: 48px;
+  min-height: 48px;
+  padding-inline: 12px;
+}
+
+.tablet-reading-toolbar--compact .tablet-reading-phase-nav {
+  height: 48px;
+  min-height: 48px;
+}
+
+.tablet-reading-toolbar--compact .tablet-reading-phase-nav .phase-tab {
+  min-height: 40px;
+}
+
+.tablet-reading-toolbar__details {
+  border-top: 1px solid rgb(255 255 255 / 0.1);
+}

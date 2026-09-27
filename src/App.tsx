@@ -1,3 +1,14 @@
+import { RecommendedBgmDock } from './components/RecommendedBgmDock';
+import { SyncQuickControls } from './components/SyncQuickControls';
+import { toggleSelectedTimer } from './utils/timerNavigation';
+import {
+  selectSyncActiveMediaId,
+  selectTimer,
+  selectTimerTargetPhase,
+  selectViewedPhase,
+  selectViewedPhaseRecommendedSoundIds,
+} from './utils/sessionSelectors';
+import { normalizeSyncConfig, setSyncActiveMedia, setSyncTimerVisibility } from './utils/syncConfig';
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
@@ -10,7 +21,7 @@ import PhaseSidebar from './components/PhaseSidebar';
 import PhaseProgressNav from './components/PhaseProgressNav';
 import PhaseCard from './components/PhaseCard';
 import { collection, addDoc, query, deleteDoc, doc, onSnapshot, orderBy } from 'firebase/firestore';
-import { AppState, Character, ImageResource, Performance, Phase, Scenario, ScenarioSnapshot, SoundCluster, SoundConfig, SoundType } from './types';
+import { AppState, Character, ImageResource, Performance, Phase, Scenario, ScenarioSnapshot, SoundCluster, SoundConfig, SoundType, SyncConfig } from './types';
 import { db, setOnQuotaExceededListener, handleFirestoreError, OperationType, isQuotaExceeded as checkQuotaInitial } from './lib/firebase';
 import { auth } from './lib/firebase';
 import { addSmartSnapshot } from './utils/snapshotHelper';
@@ -24,9 +35,10 @@ import { PhaseSearchModal } from './components/modals/PhaseSearchModal';
 import { QuickActionsModal } from './components/modals/QuickActionsModal';
 import PostSessionSummaryModal from './components/modals/PostSessionSummaryModal';
 import { motion, AnimatePresence } from 'motion/react';
-import { Loader2, AlertTriangle, ChevronLeft, ChevronRight, RotateCcw, History, ShieldAlert, X, Layout, Minus, Plus, Settings, Play, Pause, Volume2 } from 'lucide-react';
+import { Loader2, AlertTriangle, ChevronLeft, ChevronRight, RotateCcw, History, ShieldAlert, X, Layout, Minus, Plus, Settings, Play, Pause, SlidersHorizontal, Volume2 } from 'lucide-react';
 import { NetworkToast } from './components/NetworkToast';
 import { selectSyncMedia, transformDropboxUrl } from './utils/mediaHelper';
+import { getR2AssetId, touchR2AssetReferences } from './services/R2AssetService';
 import { createSecureShareId, createTimerSessionId, isSecureShareId } from './utils/syncHelper';
 import { getAppWindowMode } from './utils/appRoute';
 import { getPdfPageStateKey } from './utils/pdfAssetHelper';
@@ -69,7 +81,6 @@ const RouteLoadingScreen: React.FC<{ label: string }> = ({ label }) => (
   </div>
 );
 
-const EMPTY_CHARACTERS: Character[] = [];
 const EMPTY_PDF_PAGE_STATES: Record<string, number> = {};
 
 type MobileTab = 'phases' | 'script' | 'audio';
@@ -163,21 +174,20 @@ function App() {
   );
 
   const [activeTimerIndex, setActiveTimerIndex] = useState(0);
-
   const { requestedScenarioId, setEditorMode } = useAppWindowRouting(setState);
 
   const toggleEditorMode = useCallback(() => {
     setEditorMode(!state.isEditorMode);
   }, [setEditorMode, state.isEditorMode]);
 
-  const currentPhase = useMemo(() => 
-    (state.currentScenario.phases || []).find(p => p.id === state.currentPhaseId) || (state.currentScenario.phases || [])[0],
-    [state.currentScenario.phases, state.currentPhaseId]
+  const timerTargetPhase = useMemo(() =>
+    selectTimerTargetPhase(state.currentScenario, state.currentPhaseId),
+    [state.currentScenario, state.currentPhaseId]
   );
   
-  const activeTimer = useMemo(() => 
-    currentPhase?.timers?.[activeTimerIndex] || currentPhase?.timers?.[0],
-    [currentPhase, activeTimerIndex]
+  const activeTimer = useMemo(() =>
+    selectTimer(timerTargetPhase, activeTimerIndex),
+    [timerTargetPhase, activeTimerIndex]
   );
 
   const activeTimerState = useMemo(() => 
@@ -193,68 +203,16 @@ function App() {
   const { backupData, setBackupData, showRecoveryModal, setShowRecoveryModal } = useSessionRecovery(isReady, state);
 
   const onToggleTimer = useCallback((phaseOrTimerId?: string) => {
-    let tid = phaseOrTimerId || activeTimer?.id;
-    if (!tid) return;
-    tid = String(tid);
-
-    // Resolve to the first timer ID of the phase if a phase ID is provided
     const phases = state.currentScenario.phases || [];
-    const matchedPhase = phases.find(p => p.id === tid);
-    if (matchedPhase) {
-      tid = String(matchedPhase.timers?.[0]?.id || '');
-    }
-
-    if (!tid) return;
-
-    const tState = state.timerStates[tid] || (() => {
-      if (typeof tid === 'string' && tid.endsWith('-target')) {
-        const pId = tid.replace('-target', '');
-        const p = phases.find(x => x.id === pId);
-        const targetMin = p ? (p.targetDurationMinutes || p.timeMinutes || 5) : 5;
-        return { seconds: targetMin * 60, isRunning: false, startTime: null };
-      }
-      const timer = phases.flatMap(p => p.timers || []).find(t => t.id === tid);
-      return timer ? { seconds: timer.durationMinutes * 60, isRunning: false, startTime: null } : null;
-    })();
-
-    if (!tState) return;
-
+    const requested = phaseOrTimerId || activeTimer?.id;
+    const timerId = phases.find(phase => phase.id === requested)?.timers?.[0]?.id || requested;
+    if (!timerId) return;
+    const owner = phases.find(phase => phase.timers?.some(timer => timer.id === timerId));
+    if (!owner) return;
     audioService.activateAudio(state.currentScenario.title);
-    const isRunning = !tState.isRunning;
-
-    // Trigger tactile confirmation vibration on state transition if supported
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      if (isRunning) {
-        // Start: Double short buzzes
-        navigator.vibrate([40, 40, 40]);
-      } else {
-        // Stop: Single medium buzz
-        navigator.vibrate(80);
-      }
-    }
-    
-    let newSeconds = tState.seconds;
-    const newStartTime = isRunning ? Date.now() : null;
-
-    // If we are pausing, we need to capture the current elapsed time into seconds
-    if (!isRunning && tState.startTime) {
-      const elapsed = (Date.now() - tState.startTime) / 1000;
-      newSeconds = Math.max(0, tState.seconds - elapsed);
-    }
-    
-    setState(prev => ({ 
-      ...prev, 
-      timerStates: { 
-        ...prev.timerStates, 
-        [tid]: { 
-          ...tState, 
-          isRunning,
-          startTime: newStartTime,
-          seconds: newSeconds
-        } 
-      } 
-    }));
-  }, [activeTimer, state.timerStates, state.currentScenario.phases, state.currentScenario.title, setState]);
+    setActiveTimerIndex(owner.timers.findIndex(timer => timer.id === timerId));
+    setState(previous => toggleSelectedTimer(previous, timerId, Date.now()));
+  }, [activeTimer?.id, state.currentScenario.phases, state.currentScenario.title, setState]);
 
   const onResetTimer = useCallback((phaseOrTimerId?: string) => {
     let tid = phaseOrTimerId || activeTimer?.id;
@@ -283,8 +241,12 @@ function App() {
 
     if (!tid) return;
 
+    const owner = phases.find(phase => phase.timers?.some(timer => timer.id === tid));
+    if (owner) setActiveTimerIndex(owner.timers.findIndex(timer => timer.id === tid));
+
     setState(prev => ({ 
       ...prev, 
+      currentPhaseId: owner?.id || prev.currentPhaseId,
       timerStates: { 
         ...prev.timerStates, 
         [tid]: { 
@@ -322,7 +284,6 @@ function App() {
 
   const [mobileTab, setMobileTab] = useState<MobileTab>('script');
   const [columnFocus, setColumnFocus] = useState<ColumnFocus>('left');
-  const [activeScriptTab, setActiveScriptTab] = useState<'guide' | 'characters'>('guide');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSoundboardCollapsed, setIsSoundboardCollapsed] = useState(false);
   const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
@@ -365,9 +326,9 @@ function App() {
     }
     // 'auto' or unspecified:
     if (windowSize.width < 768) return '1-column';
-    if (windowSize.width < 1024) return '2-column';
+    if (windowSize.width < 1200 || windowSize.height < 700) return '2-column';
     return '3-column';
-  }, [state.currentScenario.layoutPreset, state.currentScenario.columnLayoutMode, windowSize.width]);
+  }, [state.currentScenario.layoutPreset, state.currentScenario.columnLayoutMode, windowSize.width, windowSize.height]);
 
   const isSpecialExtendedLayout = false;
 
@@ -378,81 +339,11 @@ function App() {
   }, [layoutMode, state.currentScenario.progressNavPosition]);
 
   const isTabletVertical = false;
-
-  // Beautiful horizontal drag-to-scroll controller for Phase elements
-  const scrollRef = useCallback((el: HTMLDivElement | null) => {
-    if (!el) return;
-    let isDown = false;
-    let startX = 0;
-    let scrollLeft = 0;
-
-    const handleMouseDown = (e: MouseEvent) => {
-      // Direct clicks on sub-elements shouldn't block native action unless dragging starts
-      isDown = true;
-      el.classList.remove('scroll-smooth'); // Disable temporarily for responsive dragging
-      startX = e.pageX - el.offsetLeft;
-      scrollLeft = el.scrollLeft;
-    };
-
-    const handleMouseLeave = () => {
-      isDown = false;
-    };
-
-    const handleMouseUp = () => {
-      isDown = false;
-      el.classList.add('scroll-smooth');
-    };
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDown) return;
-      e.preventDefault();
-      const x = e.pageX - el.offsetLeft;
-      const walk = (x - startX) * 1.5; // Drag speed multiplier
-      el.scrollLeft = scrollLeft - walk;
-    };
-
-    el.addEventListener('mousedown', handleMouseDown);
-    el.addEventListener('mouseleave', handleMouseLeave);
-    el.addEventListener('mouseup', handleMouseUp);
-    el.addEventListener('mousemove', handleMouseMove);
-
-    // Touch support for older/non-native layers
-    let touchStartX = 0;
-    let touchScrollLeft = 0;
-
-    const handleTouchStart = (e: TouchEvent) => {
-      isDown = true;
-      el.classList.remove('scroll-smooth');
-      touchStartX = e.touches[0].pageX - el.offsetLeft;
-      touchScrollLeft = el.scrollLeft;
-    };
-
-    const handleTouchEnd = () => {
-      isDown = false;
-      el.classList.add('scroll-smooth');
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (!isDown) return;
-      const x = e.touches[0].pageX - el.offsetLeft;
-      const walk = (x - touchStartX) * 1.2;
-      el.scrollLeft = touchScrollLeft - walk;
-    };
-
-    el.addEventListener('touchstart', handleTouchStart, { passive: true });
-    el.addEventListener('touchend', handleTouchEnd, { passive: true });
-    el.addEventListener('touchmove', handleTouchMove, { passive: true });
-
-    return () => {
-      el.removeEventListener('mousedown', handleMouseDown);
-      el.removeEventListener('mouseleave', handleMouseLeave);
-      el.removeEventListener('mouseup', handleMouseUp);
-      el.removeEventListener('mousemove', handleMouseMove);
-      el.removeEventListener('touchstart', handleTouchStart);
-      el.removeEventListener('touchend', handleTouchEnd);
-      el.removeEventListener('touchmove', handleTouchMove);
-    };
-  }, []);
+  const isTabletVerticalCompact = !state.isEditorMode
+    && layoutMode === '2-column'
+    && windowSize.height > windowSize.width;
+  // Native scrolling avoids double movement from touch and scripted scrolling.
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const showTopVolume = useMemo(() => 
     (state.currentScenario.masterVolumePosition === 'top' || !state.currentScenario.masterVolumePosition) && 
@@ -467,6 +358,23 @@ function App() {
     () => selectSyncMedia(state.currentScenario.playerImages, fallbackMedia),
     [state.currentScenario.playerImages, fallbackMedia]
   );
+  const r2ReferencedAssetIds = useMemo(() => [
+    ...(state.currentScenario.images || []),
+    ...(state.currentScenario.playerImages || []),
+  ].map(getR2AssetId).filter((assetId): assetId is string => assetId !== null), [
+    state.currentScenario.images,
+    state.currentScenario.playerImages,
+  ]);
+  const r2ReferenceKey = r2ReferencedAssetIds.join(',');
+
+  useEffect(() => {
+    if (!user || r2ReferencedAssetIds.length === 0) return;
+    void touchR2AssetReferences(r2ReferencedAssetIds).catch((error) => {
+      // A stale imported asset may belong to another owner. It remains hidden
+      // from this account rather than interrupting the current GM workflow.
+      console.warn('[R2 asset] Failed to refresh scenario references:', error);
+    });
+  }, [user, r2ReferencedAssetIds, r2ReferenceKey]);
 
   // Floating timer hook
   const {
@@ -571,10 +479,18 @@ function App() {
 
   const { handleStopSound, handlePlaySound, handleToggleSound } = useAudioController(state, setState, activateAudioWithPrefs);
 
-  const previewPhase = useMemo(() => 
-    (state.currentScenario.phases || []).find(p => p.id === state.previewPhaseId) || (state.currentScenario.phases || [])[0],
-    [state.currentScenario.phases, state.previewPhaseId]
+  const viewedPhase = useMemo(() =>
+    selectViewedPhase(state.currentScenario, state.previewPhaseId),
+    [state.currentScenario, state.previewPhaseId]
   );
+  const viewedPhaseRecommendedSoundIds = useMemo(
+    () => selectViewedPhaseRecommendedSoundIds(viewedPhase),
+    [viewedPhase],
+  );
+  const syncActiveMediaId = useMemo(() => selectSyncActiveMediaId(state.syncConfig, state.activeImageId), [
+    state.activeImageId,
+    state.syncConfig,
+  ]);
 
   const { syncData } = useSyncEngine({
     user,
@@ -583,7 +499,7 @@ function App() {
     isReady,
     setIsReady,
     activeTimerIndex,
-    currentPhase,
+    timerTargetPhase,
     scenarioId: requestedScenarioId,
   });
 
@@ -677,12 +593,13 @@ function App() {
 
     if (!user || !sessionId) return;
 
-    const currentTimer = currentPhase?.timers?.[activeTimerIndex] || currentPhase?.timers?.[0];
+    const currentTimer = selectTimer(timerTargetPhase, activeTimerIndex);
     const timerState = currentTimer ? state.timerStates[currentTimer.id] : null;
 
-    const resolvedUrl = mediaItem?.url 
+    const r2AssetId = action === 'stop' ? null : getR2AssetId(mediaItem);
+    const resolvedUrl = r2AssetId ? null : (mediaItem?.url 
       ? transformDropboxUrl(mediaItem.url) 
-      : (videoId && videoId.startsWith('http') ? transformDropboxUrl(videoId) : null);
+      : (videoId && videoId.startsWith('http') ? transformDropboxUrl(videoId) : null));
 
     const mergedData: TimerSyncData = {
       scenarioId: state.currentScenario.id,
@@ -697,6 +614,7 @@ function App() {
       activeImageName: action === 'stop' ? null : (mediaItem?.name || null),
       activeResourceType: action === 'stop' ? null : (mediaItem?.type || 'image'),
       pdfPage: null,
+      r2AssetId,
       syncTimerEnabled: state.syncConfig?.timerEnabled ?? true,
       syncContentEnabled: state.syncConfig?.contentEnabled ?? true,
       timerSize: state.syncConfig?.timerSize || 'small',
@@ -717,11 +635,11 @@ function App() {
     syncService.setTimerInstant(sessionId, mergedData).catch((error) => {
       console.warn('[Sync] Immediate media control write failed:', error);
     });
-  }, [user, state, currentPhase, activeTimerIndex, syncData, combinedImages]);
+  }, [user, state, timerTargetPhase, activeTimerIndex, syncData, combinedImages]);
 
   useEffect(() => {
     setActiveTimerIndex(0);
-  }, [state.currentPhaseId]);
+  }, [state.currentScenario.id]);
 
   useEffect(() => {
     const nextExpiry = Math.min(...Object.values(state.timerStates)
@@ -801,7 +719,7 @@ function App() {
         ...previous,
         currentScenario: { ...previous.currentScenario, playerImages },
         activeImageId: asset.id,
-        syncConfig: { ...previous.syncConfig, activeImageId: asset.id },
+        syncConfig: setSyncActiveMedia(previous.syncConfig, asset.id, asset),
         pdfPageStates: { ...(previous.pdfPageStates || {}), [getPdfPageStateKey(asset)]: 1 },
       };
     });
@@ -812,19 +730,9 @@ function App() {
     handlePhaseTransition, 
     handleStopPhase,
     handleCancelPhase 
-  } = usePhaseManager(state, setState, handleToggleSound, setActiveScriptTab);
+  } = usePhaseManager(setState);
 
-  const handleSetCompleted = useCallback((phaseId: string, completed: boolean) => {
-    setState(prev => ({
-      ...prev,
-      currentScenario: {
-        ...prev.currentScenario,
-        phases: (prev.currentScenario.phases || []).map(p => 
-          p.id === phaseId ? { ...p, isCompleted: completed } : p
-        )
-      }
-    }));
-  }, [setState]);
+  const handleSetCompleted = useCallback(() => {}, []);
 
   // Scenario history stack for Editor Undo/Redo
   const [undoStack, setUndoStack] = useState<Scenario[]>([]);
@@ -882,8 +790,8 @@ function App() {
   }), [undoStack.length, redoStack.length]);
 
   const currentPhaseIndex = useMemo(() => {
-    return (state.currentScenario.phases || []).findIndex(p => p.id === state.currentPhaseId);
-  }, [state.currentScenario.phases, state.currentPhaseId]);
+    return (state.currentScenario.phases || []).findIndex(p => p.id === state.previewPhaseId);
+  }, [state.currentScenario.phases, state.previewPhaseId]);
 
   const handleNextPhase = useCallback(() => {
     const phases = state.currentScenario.phases || [];
@@ -906,15 +814,15 @@ function App() {
   }, [currentPhaseIndex, state.currentScenario.phases, handlePhaseTransition]);
 
   // Global Keyboard Shortcuts Hook
-  const activePdfMedia = state.activeImageId
-    ? combinedImages.find((item) => item.id === state.activeImageId || item.url === state.activeImageId)
+  const activePdfMedia = syncActiveMediaId
+    ? combinedImages.find((item) => item.id === syncActiveMediaId || item.url === syncActiveMediaId)
     : undefined;
   useGlobalShortcuts({
     scenario: state.currentScenario,
     keyboardShortcuts: state.currentScenario.keyboardShortcuts,
     sounds: state.currentScenario.sounds,
     combinedImages,
-    activeImageId: state.activeImageId,
+    activeImageId: syncActiveMediaId,
     activePdfUrl: activePdfMedia?.type === 'pdf' ? activePdfMedia.url : null,
     activePdfPage: activePdfMedia?.type === 'pdf' ? (state.pdfPageStates?.[getPdfPageStateKey(activePdfMedia)] || 1) : undefined,
     onSetPdfPage: activePdfMedia?.type === 'pdf'
@@ -1095,6 +1003,14 @@ function App() {
       }
     }));
   }, []);
+
+  const handleUpdateRecommendedSounds = useCallback((phaseId: string, recommendedSounds: string[]) => {
+    const phases = state.currentScenario.phases || [];
+    if (!phases.some((phase) => phase.id === phaseId)) return;
+    handleUpdateScenario({
+      phases: phases.map((phase) => phase.id === phaseId ? { ...phase, recommendedSounds } : phase),
+    });
+  }, [state.currentScenario.phases, handleUpdateScenario]);
 
   const handleReorderSounds = useCallback((newSounds: SoundConfig[]) => {
     setState(prev => ({
@@ -1343,6 +1259,7 @@ function App() {
     setResetStep('select');
   }, [state.currentScenario, setResetStep, setShowResetConfirmation]);
 
+  // Existing handout URLs may still update their own character record. GM画面には操作導線を置かない。
   const handleUpdateCharacter = useCallback((charId: string, updates: Partial<Character>) => {
     setState(prev => ({
       ...prev,
@@ -1380,32 +1297,32 @@ function App() {
   const handleSyncImageToPlayers = useCallback((id: string | null) => {
     setState(s => {
       const targetId = id === null ? null : (id || s.gmActiveImageId);
+      const media = selectSyncMedia(s.currentScenario.playerImages, s.currentScenario.images || [])
+        .find((item) => item.id === targetId);
+      const syncConfig = setSyncActiveMedia(s.syncConfig, targetId, media);
       return { 
         ...s, 
         activeImageId: targetId,
-        syncConfig: s.syncConfig ? { ...s.syncConfig, activeImageId: targetId } : s.syncConfig
+        syncConfig
       };
     });
   }, []);
 
-  const handleOpenHandout = useCallback((id: string | null) => {
-    if (id) {
-      setState(previousState => {
-        const character = previousState.currentScenario.characters.find(item => item.id === id);
-        if (!character || isSecureShareId(character.handoutShareId)) return previousState;
-        return {
-          ...previousState,
-          currentScenario: {
-            ...previousState.currentScenario,
-            characters: previousState.currentScenario.characters.map(item =>
-              item.id === id ? { ...item, handoutShareId: createSecureShareId() } : item
-            )
-          }
-        };
-      });
-    }
-    setHandoutCharacterId(id);
-  }, [setHandoutCharacterId]);
+  const handleApplySyncConfig = useCallback((config: SyncConfig | undefined) => {
+    const syncConfig = normalizeSyncConfig(config);
+    setState((previous) => ({
+      ...previous,
+      syncConfig,
+      activeImageId: syncConfig.activeImageId,
+    }));
+  }, []);
+
+  const handleSetSyncTimerVisible = useCallback((visible: boolean) => {
+    setState((previous) => {
+      const syncConfig = setSyncTimerVisibility(previous.syncConfig, visible);
+      return { ...previous, syncConfig, activeImageId: syncConfig.activeImageId };
+    });
+  }, []);
 
   const handleUpdateSoundClusters = useCallback((clusters: SoundCluster[]) => {
     handleUpdateScenario({
@@ -1671,7 +1588,7 @@ function App() {
     const baseName = `${state.currentScenario.title}_ScenarioMaster_${dateStr}`;
     const zip = new JSZip();
     zip.file(`${baseName}.json`, JSON.stringify(state.currentScenario, null, 2));
-    const blob = await zip.generateAsync({ type: 'blob' });
+    const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/zip' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `${baseName}.zip`;
@@ -1706,6 +1623,12 @@ function App() {
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    const target = e.target as HTMLElement;
+    if (e.touches.length !== 1 || target.closest('.script-viewer, .phase-tab-track, button, input, select, textarea, [contenteditable], table, iframe')) {
+      touchStartX.current = null;
+      touchStartY.current = null;
+      return;
+    }
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
   };
@@ -1946,9 +1869,92 @@ function App() {
     </AnimatePresence>
   );
 
+  const liveControlBar = !state.isEditorMode ? (
+    <RecommendedBgmDock
+      phase={viewedPhase}
+      sounds={state.currentScenario.sounds || []}
+      isPlaying={state.isPlaying || {}}
+      themeColor={themeColor}
+      onToggleSound={handleToggleSound}
+      onUpdateRecommendedSounds={handleUpdateRecommendedSounds}
+    >
+      <SyncQuickControls
+        embedded
+        syncConfig={normalizeSyncConfig(state.syncConfig)}
+        onSetTimerVisible={handleSetSyncTimerVisible}
+        onOpenSyncStudio={() => setShowSyncModal(true)}
+      />
+    </RecommendedBgmDock>
+  ) : null;
+
+  const topbarBgmControl = !state.isEditorMode ? (
+    <RecommendedBgmDock
+      placement="topbar"
+      phase={viewedPhase}
+      sounds={state.currentScenario.sounds || []}
+      isPlaying={state.isPlaying || {}}
+      themeColor={themeColor}
+      onToggleSound={handleToggleSound}
+      onUpdateRecommendedSounds={handleUpdateRecommendedSounds}
+    />
+  ) : null;
+
+  const performanceControlBar = !state.isEditorMode ? (
+    <section aria-label="進行操作" className="performance-control-bar shrink-0 border-b border-white/10 bg-[#0a0a0b] px-3 py-1.5 text-white">
+      <div className="performance-control-bar__content flex min-h-11 items-center justify-between gap-3">
+        <div className="performance-control-bar__primary flex min-w-0 items-center gap-3">
+          <div
+            ref={timerDropdownRef1}
+            onClick={() => {
+              setIsTimerDropdownOpen(!isTimerDropdownOpen);
+              audioService.activateAudio(state.currentScenario.title);
+            }}
+            className={`performance-control-bar__timer relative flex items-center justify-center rounded-lg border bg-zinc-950/80 px-4 py-2 shadow-xl transition-all hover:border-white/20 active:scale-95 shrink-0 cursor-pointer select-none
+              ${activeTimerState?.isRunning ? 'border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.12)]' : 'border-white/10'}`}
+            style={{ borderWidth: '0px' }}
+          >
+            <CompactTimerReadout timerState={activeTimerState} className="font-mono leading-none font-black tabular-nums tracking-wide transition-all duration-300" fontSize="clamp(30px, 4.8vw, 38px)" />
+            {renderTimerDropdown()}
+          </div>
+          <div className="flex min-w-0 items-center gap-3">
+            {topbarBgmControl}
+            <button
+              type="button"
+              onClick={() => {
+                setIsSoundPopupOpen(!isSoundPopupOpen);
+                setIsPhasePopupOpen(false);
+              }}
+              className="order-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#121214] text-white/45 shadow-md transition-all duration-300 hover:border-white/20 hover:text-white active:scale-95"
+              style={Object.values(state.isPlaying || {}).some(Boolean) ? {
+                backgroundImage: `linear-gradient(135deg, ${themeColor}dd, ${themeColor}88)`,
+                borderColor: themeColor,
+                boxShadow: `0 0 15px ${themeColor}77`,
+                color: '#ffffff'
+              } : undefined}
+              title="音響パネル"
+              aria-label="音響パネルを開く"
+            >
+              <SlidersHorizontal size={17} />
+            </button>
+          </div>
+        </div>
+        <SyncQuickControls
+          embedded
+          syncConfig={normalizeSyncConfig(state.syncConfig)}
+          onSetTimerVisible={handleSetSyncTimerVisible}
+          onOpenSyncStudio={() => setShowSyncModal(true)}
+          className="performance-control-bar__sync"
+        />
+      </div>
+    </section>
+  ) : null;
+
   return (
     <div 
-      className={`h-[100dvh] w-screen flex flex-col bg-[#050505] overflow-hidden select-none relative font-sans text-white/80 transition-all duration-300`}
+      className={[
+        'h-[100dvh] w-screen flex flex-col bg-[#050505] overflow-hidden select-none relative font-sans text-white/80 transition-all duration-300',
+        isTabletVerticalCompact && 'tablet-reading-toolbar--compact',
+      ].filter(Boolean).join(' ')}
       style={{ overscrollBehavior: 'none' }}
     >
       <div 
@@ -1987,6 +1993,7 @@ function App() {
         )}
       </AnimatePresence>
 
+      <div className="tablet-reading-toolbar relative z-50 shrink-0">
       <LiveHeader 
         title={state.currentScenario.title}
         themeColor={themeColor}
@@ -2024,19 +2031,19 @@ function App() {
         onResetTimer={onResetTimer}
         onAdjustTimer={onAdjustTimer}
         onPrevTimer={() => {
-          const timerCount = (currentPhase?.timers || []).length;
+          const timerCount = (timerTargetPhase?.timers || []).length;
           if (timerCount > 1) {
             setActiveTimerIndex(prev => (prev - 1 + timerCount) % timerCount);
           }
         }}
         onNextTimer={() => {
-          const timerCount = (currentPhase?.timers || []).length;
+          const timerCount = (timerTargetPhase?.timers || []).length;
           if (timerCount > 1) {
             setActiveTimerIndex(prev => (prev + 1) % timerCount);
           }
         }}
         onMenuShowChange={setIsMenuOpen}
-        totalTimers={(currentPhase?.timers || []).length}
+        totalTimers={(timerTargetPhase?.timers || []).length}
         timerDisplayPosition={state.currentScenario.timerDisplayPosition}
         onOpenSync={() => setShowSyncModal(true)}
         quotaExceeded={quotaExceeded}
@@ -2047,6 +2054,8 @@ function App() {
         onRegisterLocalScenarios={registerLocalScenarios}
         scenarioSwitching={scenarioSwitching}
       />
+
+      {layoutMode !== '2-column' && liveControlBar}
 
       {!state.isEditorMode && activeTimer && activeTimerState && layoutMode === '1-column' && (state.currentScenario.timerDisplayPosition === 'header' || state.currentScenario.timerDisplayPosition === 'both') && (
         <div className="flex items-center justify-between px-4 py-2 bg-[#0a0a0b] border-b border-white/10 z-30 shrink-0">
@@ -2071,6 +2080,7 @@ function App() {
            </div>
         </div>
       )}
+      </div>
 
       {/* 統合ドラッグ＆ドックフローティングタイマー (v0.86 UI & UX Optimization) */}
       {layoutMode !== '1-column' && activeTimer && activeTimerState && !isMenuOpen && (!timerDocked || isSpecialExtendedLayout) && (
@@ -2099,7 +2109,7 @@ function App() {
             isRunning={activeTimerState.isRunning}
             startTime={activeTimerState.startTime}
             themeColor={themeColor}
-            totalTimers={(currentPhase?.timers || []).length}
+            totalTimers={(timerTargetPhase?.timers || []).length}
             activeTimerIndex={activeTimerIndex}
             isCollapsed={false}
             isLoggedIn={!!user}
@@ -2111,13 +2121,13 @@ function App() {
             timerFlashOnPauseEnabled={state.currentScenario.timerFlashOnPauseEnabled}
             onSetDocked={setTimerDocked}
             onPrev={() => {
-              const timerCount = (currentPhase?.timers || []).length;
+              const timerCount = (timerTargetPhase?.timers || []).length;
               if (timerCount > 1) {
                 setActiveTimerIndex(prev => (prev - 1 + timerCount) % timerCount);
               }
             }}
             onNext={() => {
-              const timerCount = (currentPhase?.timers || []).length;
+              const timerCount = (timerTargetPhase?.timers || []).length;
               if (timerCount > 1) {
                 setActiveTimerIndex(prev => (prev + 1) % timerCount);
               }
@@ -2220,7 +2230,7 @@ function App() {
                     onStopSound={handleStopSound}
                     onUpdateSoundConfig={handleUpdateSoundConfig}
                     onReorderSounds={handleReorderSounds}
-                    recommendedIds={currentPhase?.recommendedSounds || []}
+                    recommendedIds={viewedPhaseRecommendedSoundIds}
                     themeColor={themeColor}
                     masterVolume={state.volume}
                     onMasterVolumeChange={handleMasterVolumeChange}
@@ -2236,17 +2246,12 @@ function App() {
 
               {/* PANEL 2: GM Guide (ScriptViewer) 1-column layout */}
               <div className="w-[100vw] h-full shrink-0 bg-[#070707] relative overflow-hidden">
-                {previewPhase && (
+                {viewedPhase && (
                   <ScriptViewer 
-                    phase={previewPhase} 
+                    phase={viewedPhase}
                     scenario={state.currentScenario}
                     scenarioTitle={state.currentScenario.title}
-                    characters={state.currentScenario.characters || EMPTY_CHARACTERS}
-                    onUpdateCharacter={handleUpdateCharacter}
-                    isPreviewing={state.previewPhaseId !== state.currentPhaseId}
-                    activeTab={activeScriptTab}
-                    onTabChange={setActiveScriptTab}
-                    onOpenHandout={handleOpenHandout}
+                    isPreviewing={false}
                     activeImageId={state.activeImageId}
                     onShowImage={handleShowImage}
                     pdfPageStates={state.pdfPageStates || EMPTY_PDF_PAGE_STATES}
@@ -2266,12 +2271,12 @@ function App() {
             >
               {/* Top Navigation: Render progress management bar at top ONLY inside tablet portrait mode */}
               {layoutMode === '2-column' && (
-                <div className="w-full h-16 bg-[#0a0a0b] border-b border-white/20 flex items-center justify-between px-3 md:px-5 shrink-0 z-50 select-none">
+                <div className="tablet-reading-phase-nav w-full h-16 bg-[#0a0a0b] border-b border-white/20 flex items-center justify-between px-3 md:px-5 shrink-0 z-50 select-none">
                   {/* Left Area: Horizontal scrollable Phase Card Track */}
                   <div 
                     ref={scrollRef}
-                    className="flex items-center gap-1.5 md:gap-2 overflow-x-auto no-scrollbar scroll-smooth flex-1 max-w-[70%] py-1 cursor-grab active:cursor-grabbing mr-4"
-                    style={{ height: '50.75px', backgroundColor: 'transparent' }}
+                    className="flex items-center gap-1.5 md:gap-2 phase-tab-track overflow-x-auto no-scrollbar flex-1 min-w-0 py-1 cursor-grab active:cursor-grabbing mr-4"
+                    style={{ minHeight: '56px', backgroundColor: 'transparent' }}
                   >
                     {(state.currentScenario.phases || []).map((phase, index) => {
                       const isActive = phase.id === state.currentPhaseId;
@@ -2308,65 +2313,20 @@ function App() {
                     })}
                   </div>
 
-                  {/* Center Area: Elegant Draggable Cockpit Clock & Timer (Timer Digits Only) */}
-                  <div 
-                    ref={timerDropdownRef1}
-                    onClick={() => {
-                      setIsTimerDropdownOpen(!isTimerDropdownOpen);
-                      audioService.activateAudio(state.currentScenario.title);
-                    }}
-                    className={`relative flex items-center justify-center bg-zinc-950/80 border rounded-full px-5 py-2 hover:border-white/20 select-none shadow-xl cursor-pointer transition-all active:scale-95 shrink-0
-                      ${activeTimerState?.isRunning ? 'border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.12)]' : 'border-white/10'}`}
-                    style={{ borderWidth: '0px' }}
-                  >
-                      <CompactTimerReadout timerState={activeTimerState} className="font-mono leading-none font-black tabular-nums tracking-wide transition-all duration-300" fontSize="38px" />
-                      {renderTimerDropdown()}
-                  </div>
-
-                  {/* Right Area: Dynamic Audio Monitor Token Mixer Toggle */}
-                  <div className="flex items-center gap-3">
-                    <span className="hidden md:inline text-[9px] font-black font-cinzel text-white/30 tracking-widest uppercase text-right">
-                      {Object.values(state.isPlaying || {}).some(Boolean) ? 'BGM/SE ACTIVE' : 'BGM INERT'}
-                    </span>
-                    
-                    <button
-                      onClick={() => {
-                        setIsSoundPopupOpen(!isSoundPopupOpen);
-                        setIsPhasePopupOpen(false);
-                      }}
-                      className="w-11 h-11 rounded-full flex items-center justify-center transition-all duration-300 cursor-pointer active:scale-95 shadow-md border bg-[#121214] text-white/40 border-white/10 hover:border-white/20 hover:text-white"
-                      style={Object.values(state.isPlaying || {}).some(Boolean) ? {
-                        backgroundImage: `linear-gradient(135deg, ${themeColor}dd, ${themeColor}88)`,
-                        borderColor: themeColor,
-                        boxShadow: `0 0 15px ${themeColor}77`,
-                        color: '#ffffff'
-                      } : undefined}
-                      title="Audio Control Console"
-                    >
-                      {Object.values(state.isPlaying || {}).some(Boolean) ? (
-                        <Pause size={18} fill="currentColor" />
-                      ) : (
-                        <Play size={18} fill="currentColor" className="ml-0.5" />
-                      )}
-                    </button>
-                  </div>
                 </div>
               )}
 
+              {layoutMode === '2-column' && performanceControlBar}
+
               {/* 2. GRAND GM STUDY & SCRIPT VIEW (Fills the entire remaining screen) */}
               <div className="flex-1 w-full bg-black/30 backdrop-blur-md relative overflow-hidden">
-                {previewPhase && (
+                {viewedPhase && (
                   <ScriptViewer 
-                    phase={previewPhase} 
+                    phase={viewedPhase}
                     scenario={state.currentScenario}
                     scenarioTitle={state.currentScenario.title}
-                    characters={state.currentScenario.characters || EMPTY_CHARACTERS}
-                    onUpdateCharacter={handleUpdateCharacter}
                     onToggleChecklist={handleToggleChecklist}
-                    isPreviewing={state.previewPhaseId !== state.currentPhaseId}
-                    activeTab={activeScriptTab}
-                    onTabChange={setActiveScriptTab}
-                    onOpenHandout={handleOpenHandout}
+                    isPreviewing={false}
                     activeImageId={state.activeImageId}
                     onShowImage={handleShowImage}
                     pdfPageStates={state.pdfPageStates || EMPTY_PDF_PAGE_STATES}
@@ -2383,7 +2343,7 @@ function App() {
                   {/* Left Area: Horizontal scrollable Phase Card Track */}
                   <div 
                     ref={scrollRef}
-                    className="flex items-center gap-1.5 md:gap-2 overflow-x-auto no-scrollbar scroll-smooth flex-1 max-w-[70%] py-1 cursor-grab active:cursor-grabbing mr-4"
+                    className="flex items-center gap-1.5 md:gap-2 phase-tab-track overflow-x-auto no-scrollbar flex-1 min-w-0 py-1 cursor-grab active:cursor-grabbing mr-4"
                   >
                     {(state.currentScenario.phases || []).map((phase, index) => {
                       const isActive = phase.id === state.currentPhaseId;
@@ -2556,7 +2516,7 @@ function App() {
                     {/* Integrated custom tracks with perfect circles for BGM / SFX control */}
                     {(state.currentScenario.sounds || []).map((sound) => {
                       const active = !!state.isPlaying[sound.id];
-                      const isLinked = (previewPhase?.recommendedSounds || []).includes(sound.id);
+                      const isLinked = viewedPhaseRecommendedSoundIds.includes(sound.id);
                       
                       return (
                         <div 
@@ -2693,18 +2653,13 @@ function App() {
               animate={{ width: middlePanelWidth }}
               transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
             >
-              {previewPhase && (
+              {viewedPhase && (
                 <ScriptViewer 
-                  phase={previewPhase} 
+                  phase={viewedPhase}
                   scenario={state.currentScenario}
                   scenarioTitle={state.currentScenario.title}
-                  characters={state.currentScenario.characters || EMPTY_CHARACTERS}
-                  onUpdateCharacter={handleUpdateCharacter}
                   onToggleChecklist={handleToggleChecklist}
-                  isPreviewing={state.previewPhaseId !== state.currentPhaseId}
-                  activeTab={activeScriptTab}
-                  onTabChange={setActiveScriptTab}
-                  onOpenHandout={handleOpenHandout}
+                  isPreviewing={false}
                   activeImageId={state.gmActiveImageId !== null ? state.gmActiveImageId : state.activeImageId}
                   onShowImage={handleShowImage}
                   pdfPageStates={state.pdfPageStates || EMPTY_PDF_PAGE_STATES}
@@ -2759,7 +2714,7 @@ function App() {
                         isRunning={activeTimerState.isRunning}
                         startTime={activeTimerState.startTime}
                         themeColor={themeColor}
-                        totalTimers={(currentPhase?.timers || []).length}
+                        totalTimers={(timerTargetPhase?.timers || []).length}
                         activeTimerIndex={activeTimerIndex}
                         isCollapsed={false}
                         isLoggedIn={!!user}
@@ -2785,13 +2740,13 @@ function App() {
                         onOpenSyncModal={() => setShowSyncModal(true)}
                         onSetDocked={setTimerDocked}
                         onPrev={() => {
-                          const timerCount = (currentPhase?.timers || []).length;
+                          const timerCount = (timerTargetPhase?.timers || []).length;
                           if (timerCount > 1) {
                             setActiveTimerIndex(prev => (prev - 1 + timerCount) % timerCount);
                           }
                         }}
                         onNext={() => {
-                          const timerCount = (currentPhase?.timers || []).length;
+                          const timerCount = (timerTargetPhase?.timers || []).length;
                           if (timerCount > 1) {
                             setActiveTimerIndex(prev => (prev + 1) % timerCount);
                           }
@@ -2941,7 +2896,7 @@ function App() {
                   onStopSound={handleStopSound}
                   onUpdateSoundConfig={handleUpdateSoundConfig}
                   onReorderSounds={handleReorderSounds}
-                  recommendedIds={currentPhase?.recommendedSounds || []}
+                  recommendedIds={viewedPhaseRecommendedSoundIds}
                   themeColor={themeColor}
                   masterVolume={state.volume}
                   onMasterVolumeChange={handleMasterVolumeChange}
@@ -3187,7 +3142,7 @@ function App() {
         dragX={dragX}
         dragY={dragY}
         themeColor={themeColor}
-        currentPhase={currentPhase}
+        currentPhase={timerTargetPhase}
         activeTimerIndex={activeTimerIndex}
         user={user}
         timerLabelText={state.syncConfig?.timerLabelText}
@@ -3233,10 +3188,8 @@ function App() {
         showSyncModal={showSyncModal}
         setShowSyncModal={setShowSyncModal}
         onShareSync={getShareTimerUrl}
-        onApplySync={(config) => {
-          setState(s => ({ ...s, syncConfig: config, activeImageId: config.activeImageId }));
-        }}
-        syncConfig={state.syncConfig}
+        onApplySync={handleApplySyncConfig}
+        syncConfig={normalizeSyncConfig(state.syncConfig)}
         activeTimer={activeTimer}
         activeTimerState={activeTimerState}
         onToggleTimer={onToggleTimer}

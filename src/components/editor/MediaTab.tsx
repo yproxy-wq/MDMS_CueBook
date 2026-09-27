@@ -1,16 +1,20 @@
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import type { User } from 'firebase/auth';
 import { Scenario, MediaResource } from '../../types';
 import { Upload, Trash2, Edit2, Check, X, Search, Image as ImageIcon, Copy, Link as LinkIcon, Plus, Video, FileText, ChevronUp, ChevronDown, Hash } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { transformDropboxUrl } from '../../utils/mediaHelper';
+import { getR2StorageErrorMessage, isR2Asset, uploadR2Asset } from '../../services/R2AssetService';
+import { OwnerMediaImage } from '../OwnerMediaImage';
 
 interface MediaTabProps {
   scenario: Scenario;
+  user: User | null;
   onUpdate: (updated: Partial<Scenario>) => void;
 }
 
-export const MediaTab: React.FC<MediaTabProps> = ({ scenario, onUpdate }) => {
+export const MediaTab: React.FC<MediaTabProps> = ({ scenario, user, onUpdate }) => {
   const [activeSubTab, setActiveSubTab] = useState<'images' | 'playerImages'>('images');
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -20,6 +24,24 @@ export const MediaTab: React.FC<MediaTabProps> = ({ scenario, onUpdate }) => {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isSequential, setIsSequential] = useState(false);
+  const [isBizStorageEnabled, setIsBizStorageEnabled] = useState(false);
+  const [isR2Uploading, setIsR2Uploading] = useState(false);
+  const [r2UploadLabel, setR2UploadLabel] = useState<string | null>(null);
+  const [r2UploadError, setR2UploadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) {
+      setIsBizStorageEnabled(false);
+      return;
+    }
+    void user.getIdTokenResult().then((result) => {
+      if (!cancelled) setIsBizStorageEnabled(result.claims.cuebookPlan === 'biz');
+    }).catch(() => {
+      if (!cancelled) setIsBizStorageEnabled(false);
+    });
+    return () => { cancelled = true; };
+  }, [user]);
   
   const resources = useMemo(() => {
     if (activeSubTab === 'playerImages') {
@@ -202,6 +224,37 @@ export const MediaTab: React.FC<MediaTabProps> = ({ scenario, onUpdate }) => {
     e.target.value = '';
   }, [scenario.images, scenario.playerImages, onUpdate, isSequential, activeSubTab]);
 
+  const handleR2Upload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    if (!fileList || !isBizStorageEnabled || isR2Uploading) return;
+
+    const files = Array.from(fileList).slice(0, 10);
+    setIsR2Uploading(true);
+    setR2UploadError(null);
+    const uploaded: MediaResource[] = [];
+    const failures: string[] = [];
+    try {
+      for (const file of files) {
+        setR2UploadLabel(file.name);
+        try {
+          uploaded.push(await uploadR2Asset(scenario.id, file));
+        } catch (error) {
+          failures.push(`${file.name}: ${getR2StorageErrorMessage(error)}`);
+        }
+      }
+      if (uploaded.length > 0) {
+        const fieldName = activeSubTab === 'playerImages' ? 'playerImages' : 'images';
+        const existing = activeSubTab === 'playerImages' ? (scenario.playerImages || []) : (scenario.images || []);
+        onUpdate({ [fieldName]: [...existing, ...uploaded] });
+      }
+      if (failures.length > 0) setR2UploadError(failures.join(' / '));
+    } finally {
+      setIsR2Uploading(false);
+      setR2UploadLabel(null);
+      e.target.value = '';
+    }
+  }, [activeSubTab, isBizStorageEnabled, isR2Uploading, onUpdate, scenario.id, scenario.images, scenario.playerImages]);
+
   const handleAddLink = async () => {
     if (!newLinkUrl.trim()) return;
 
@@ -264,7 +317,13 @@ export const MediaTab: React.FC<MediaTabProps> = ({ scenario, onUpdate }) => {
     navigator.clipboard.writeText(tag);
   };
 
-  const getResourceSizeInfo = useCallback((url: string) => {
+  const getResourceSizeInfo = useCallback((resource: MediaResource) => {
+    if (isR2Asset(resource)) {
+      const bytes = resource.sizeBytes || 0;
+      const kb = bytes / 1024;
+      return { size: bytes, isLocal: false, label: bytes > 0 ? `R2 · ${kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb.toFixed(0)} KB`}` : 'CueBook R2', percentage: 0 };
+    }
+    const url = resource.url;
     if (!url) return { size: 0, isLocal: false, label: '0 KB', percentage: 0 };
     if (url.startsWith('http://') || url.startsWith('https://')) {
       return { size: 0, isLocal: false, label: '外部リンク (URL分のみ)', percentage: 0 };
@@ -415,6 +474,39 @@ export const MediaTab: React.FC<MediaTabProps> = ({ scenario, onUpdate }) => {
           
         </div>
       </header>
+
+      {/* Dropbox-first resource registration */}
+      <section className={`relative overflow-hidden rounded-2xl border p-5 md:p-6 shadow-xl ${isBizStorageEnabled ? 'border-emerald-400/30 bg-gradient-to-br from-emerald-500/15 via-teal-500/[0.07] to-black shadow-emerald-950/20' : 'border-white/10 bg-white/[0.02]'}`}>
+        <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 text-lg font-bold text-white">
+              <Upload size={19} className={isBizStorageEnabled ? 'text-emerald-300' : 'text-white/35'} /> CueBookストレージ（Biz）
+            </h3>
+            <p className="mt-1 text-[10px] leading-relaxed text-white/50">
+              JPEG / PNG / WebP / GIF / PDFを、シナリオ250MB・1ファイル100MBまで保存できます。動画と非Bizプランは従来の登録方法を使います。
+            </p>
+          </div>
+          <label
+            aria-disabled={!isBizStorageEnabled || isR2Uploading}
+            title={isBizStorageEnabled ? 'CueBookストレージへ保存' : (user ? 'CueBookストレージはBizプラン専用です' : 'ログイン後にプランを確認します')}
+            className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-xs font-black transition-all ${
+              isR2Uploading
+                ? 'cursor-wait bg-emerald-950 text-emerald-300'
+                : isBizStorageEnabled
+                  ? 'cursor-pointer bg-emerald-400 text-emerald-950 hover:bg-emerald-300'
+                  : 'cursor-not-allowed border border-white/10 bg-white/[0.04] text-white/25'
+            }`}
+          >
+            <Upload size={16} /> {isR2Uploading
+              ? `${r2UploadLabel || '保存'} をアップロード中…`
+              : isBizStorageEnabled
+                ? '端末からCueBookへ保存'
+                : (user ? 'Bizプラン専用' : 'ログインしてプランを確認')}
+            <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,.jpg,.jpeg,.png,.webp,.gif,.pdf" multiple disabled={!isBizStorageEnabled || isR2Uploading} onChange={handleR2Upload} className="hidden" />
+          </label>
+        </div>
+        {r2UploadError && <p className="relative mt-3 rounded-lg border border-red-500/30 bg-red-950/40 px-3 py-2 text-[10px] leading-relaxed text-red-200">{r2UploadError}</p>}
+      </section>
 
       {/* Dropbox-first resource registration */}
       <section className="relative overflow-hidden rounded-2xl border border-sky-400/30 bg-gradient-to-br from-sky-500/15 via-blue-500/[0.07] to-black p-5 md:p-6 shadow-xl shadow-sky-950/20">
@@ -608,9 +700,11 @@ export const MediaTab: React.FC<MediaTabProps> = ({ scenario, onUpdate }) => {
                       muted 
                       preload="metadata"
                     />
+                  ) : img.type === 'pdf' ? (
+                    <FileText size={32} className="text-sky-300/50" />
                   ) : img.url ? (
-                    <img 
-                      src={img.url} 
+                    <OwnerMediaImage 
+                      source={img.url} 
                       alt={img.name} 
                       className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" 
                     />
@@ -702,13 +796,13 @@ export const MediaTab: React.FC<MediaTabProps> = ({ scenario, onUpdate }) => {
                   <div className="flex items-center justify-between text-[9px] border-t border-white/[0.03] pt-1.5">
                     <span className="text-white/20 uppercase tracking-wider font-semibold font-mono">データサイズ:</span>
                     <span className={`font-mono font-bold ${
-                      img.url?.startsWith('http') 
-                        ? 'text-sky-400' 
-                        : getResourceSizeInfo(img.url).size > 700 * 1024 
+                       img.url?.startsWith('http') || isR2Asset(img)
+                         ? 'text-sky-400' 
+                        : getResourceSizeInfo(img).size > 700 * 1024 
                           ? 'text-red-400' 
                           : 'text-white/60'
                     }`}>
-                      {getResourceSizeInfo(img.url).label}
+                      {getResourceSizeInfo(img).label}
                     </span>
                   </div>
                 </div>

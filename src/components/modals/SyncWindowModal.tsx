@@ -6,8 +6,12 @@ import { Share, Copy, Check, ExternalLink, Play, Pause, RotateCcw, Monitor, Imag
 import { QRCodeSVG } from 'qrcode.react';
 import { SyncConfig, ImageResource } from '../../types';
 import { isConfigDirty } from '../../utils/syncHelper';
+import { setSyncActiveMedia } from '../../utils/syncConfig';
 import { transformDropboxUrl } from '../../utils/mediaHelper';
 import { getPdfPageStateKey } from '../../utils/pdfAssetHelper';
+import { isSyncContentVisible, isSyncTimerVisible } from '../../utils/sessionSelectors';
+import { OwnerMediaImage } from '../OwnerMediaImage';
+import { isR2Asset } from '../../services/R2AssetService';
 
 interface SyncWindowModalProps {
   isOpen: boolean;
@@ -45,7 +49,8 @@ const SyncPreview: React.FC<{
 }> = React.memo(({ config, availableMedia, timerLabel, displaySeconds, isTimerRunning, formatTime }) => {
   // Normalize IDs for matching - use a robust string comparison
   const activeId = config.activeImageId ? String(config.activeImageId).trim() : null;
-  const isVisible = config.contentEnabled;
+  const isVisible = isSyncContentVisible(config);
+  const isTimerVisible = isSyncTimerVisible(config);
 
   // Find the current item
   const mediaItem = React.useMemo(() => 
@@ -82,14 +87,14 @@ const SyncPreview: React.FC<{
               transition={{ duration: 0.4, ease: "easeInOut" }}
               className="w-full h-full flex items-center justify-center overflow-hidden relative"
             >
-              {displayMedia.assetId ? (
+              {displayMedia.type === 'pdf' ? (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-sky-950/40 text-sky-100">
                   <FileText size={28} className="text-sky-300" />
-                  <span className="text-[8px] font-mono tracking-widest">DROPBOX PDF · {displayMedia.pageCount || '?'} PAGES</span>
+                  <span className="text-[8px] font-mono tracking-widest">{isR2Asset(displayMedia) ? 'CUEBOOK R2 PDF' : `DROPBOX PDF · ${displayMedia.pageCount || '?'} PAGES`}</span>
                 </div>
               ) : (
-                <img
-                  src={displayMedia.url}
+                <OwnerMediaImage
+                  source={displayMedia.url}
                   alt="Preview"
                   className="w-full h-full pointer-events-none"
                   style={{
@@ -139,7 +144,7 @@ const SyncPreview: React.FC<{
 
       {/* Timer Overlay */}
       <AnimatePresence>
-        {config.timerEnabled && !config.timerForceHidden && (
+        {isTimerVisible && (
           <motion.div 
             initial={{ opacity: 0, y: config.timerPosition === 'bottom' ? 10 : -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -172,7 +177,7 @@ const SyncPreview: React.FC<{
       </AnimatePresence>
 
       {/* Dark gradient for timer readability */}
-      {config.timerEnabled && !config.timerForceHidden && isVisible && activeId && (
+      {isTimerVisible && isVisible && activeId && (
         <div className={`absolute inset-x-0 h-10 bg-gradient-to-${config.timerPosition === 'bottom' ? 't' : 'b'} from-black/60 to-transparent pointer-events-none ${config.timerPosition === 'bottom' ? 'bottom-0' : 'top-0'}`} />
       )}
 
@@ -235,6 +240,7 @@ const SyncWindowModal: React.FC<SyncWindowModalProps> = ({
   const [dropboxMessage, setDropboxMessage] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{ stage: string; currentPage: number; pageCount: number } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isMediaGalleryOpen, setIsMediaGalleryOpen] = useState(false);
   const uploadAbortRef = React.useRef<AbortController | null>(null);
   const pdfUploadInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -247,7 +253,17 @@ const SyncWindowModal: React.FC<SyncWindowModalProps> = ({
 
   const isDirty = isConfigDirty(draft, syncConfig);
   const selectedMedia = availableMedia.find((media) => String(media.id) === String(draft.activeImageId));
+  const mediaSelectValue = selectedMedia?.id || '__cuebook_no_active_media__';
   const selectedPdfPage = selectedMedia?.type === 'pdf' ? (pdfPageStates[getPdfPageStateKey(selectedMedia)] || 1) : null;
+
+  const applyMediaSelection = useCallback((mediaId: string | null) => {
+    const selected = mediaId
+      ? availableMedia.find((media) => String(media.id) === String(mediaId)) || null
+      : null;
+    const next = setSyncActiveMedia(draft, selected?.id || null, selected);
+    setDraft(next);
+    onApplySync(next);
+  }, [availableMedia, draft, onApplySync]);
 
   const refreshDropboxConnection = useCallback(async () => {
     if (!isLoggedIn) return;
@@ -1029,7 +1045,48 @@ const SyncWindowModal: React.FC<SyncWindowModalProps> = ({
                   </div>
                 )}
 
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 lg:grid-cols-8">
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <label htmlFor="sync-media-select" className="mb-2 block text-[8px] font-bold uppercase tracking-widest text-white/30">
+                    投影するコンテンツ
+                  </label>
+                  <select
+                    id="sync-media-select"
+                    aria-label="投影する画像またはPDFを選択"
+                    value={mediaSelectValue}
+                    onChange={(event) => applyMediaSelection(
+                      event.target.value === '__cuebook_no_active_media__' ? null : event.target.value,
+                    )}
+                    className="min-h-11 w-full rounded-lg border border-sky-400/30 bg-zinc-950 px-3 text-sm font-bold text-white outline-none transition-colors focus:border-sky-300"
+                  >
+                    <option value="__cuebook_no_active_media__">投影しない</option>
+                    {availableMedia.map((media, index) => (
+                      <option key={media.id} value={media.id}>
+                        #{index + 1} {media.type === 'pdf' ? '[PDF] ' : ''}{media.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="mt-2 flex items-center justify-between gap-3 text-[9px]">
+                    <span className="min-w-0 truncate text-white/45">
+                      {selectedMedia
+                        ? `選択中: #${availableMedia.indexOf(selectedMedia) + 1} ${selectedMedia.name}`
+                        : draft.activeImageId
+                          ? '選択中の素材は一覧にありません'
+                          : '現在は投影していません'}
+                    </span>
+                    <button
+                      type="button"
+                      aria-expanded={isMediaGalleryOpen}
+                      aria-controls="sync-media-gallery"
+                      onClick={() => setIsMediaGalleryOpen((open) => !open)}
+                      className="shrink-0 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1.5 font-bold text-white/60 transition-colors hover:border-sky-300/40 hover:text-sky-100"
+                    >
+                      {isMediaGalleryOpen ? '一覧を閉じる' : 'サムネイルで選ぶ'}
+                    </button>
+                  </div>
+                </div>
+
+                {isMediaGalleryOpen && (
+                  <div id="sync-media-gallery" className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
                   {/* None Option */}
                   <button
                     onClick={() => {
@@ -1100,14 +1157,14 @@ const SyncWindowModal: React.FC<SyncWindowModalProps> = ({
                           </span>
                         </div>
 
-                        {media.assetId ? (
+                        {media.type === 'pdf' ? (
                           <div className="w-full h-full bg-sky-950/50 flex flex-col items-center justify-center gap-1">
                             <FileText size={20} className="text-sky-300" />
-                            <span className="text-[7px] font-mono text-sky-200">{media.pageCount || '?'} PAGES</span>
+                            <span className="text-[7px] font-mono text-sky-200">{isR2Asset(media) ? 'R2 PDF' : `${media.pageCount || '?'} PAGES`}</span>
                           </div>
                         ) : media.url ? (
-                          <img 
-                            src={media.url} 
+                          <OwnerMediaImage 
+                            source={media.url} 
                             alt={media.name}
                             className={`w-full h-full object-cover transition-all ${isSelected ? 'opacity-100' : 'opacity-40 group-hover:opacity-60'}`}
                             referrerPolicy="no-referrer"
@@ -1128,7 +1185,8 @@ const SyncWindowModal: React.FC<SyncWindowModalProps> = ({
                       </button>
                     );
                   })}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

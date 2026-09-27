@@ -547,7 +547,7 @@ const Header: React.FC<HeaderProps> = React.memo(({
               </div>
             )}
 
-              {user && (
+              {user && (quotaExceeded || networkState.status !== 'healthy') && (
                 <div 
                   className={`group relative flex items-center gap-1.5 px-2 py-1 rounded-full border animate-in fade-in zoom-in duration-500 cursor-help transition-all ${
                     quotaExceeded 

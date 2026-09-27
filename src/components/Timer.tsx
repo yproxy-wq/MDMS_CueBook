@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import HoldButton from './HoldButton';
 import { formatMinutesSeconds, isWarningTime } from '../utils/functionalHelper';
 import { audioService } from '../services/AudioService';
+import { useOwnerMediaUrl } from '../hooks/useOwnerMediaUrl';
 
 interface TimerProps {
   config: TimerConfig;
@@ -50,6 +51,7 @@ const TimerCard: React.FC<TimerProps> = ({
 
   const triggeredLaps = React.useRef<Set<number>>(new Set());
   const [activeLapHighlight, setActiveLapHighlight] = useState<number | null>(null);
+  const resolvedImageUrl = useOwnerMediaUrl(imageUrl);
 
   const lapTimes = config.lapTimes;
 
@@ -347,7 +349,7 @@ const TimerCard: React.FC<TimerProps> = ({
       {/* Background Image / PDF Preview layer for docked state */}
       {isDocked && (
         <div className="absolute inset-x-0.5 top-0.5 bottom-0.5 bg-black pointer-events-none rounded-2xl overflow-hidden z-0">
-          {imageUrl ? (
+          {resolvedImageUrl ? (
             resourceType === 'pdf' ? (
               <div className="w-full h-full bg-neutral-900/90 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-1 opacity-20">
@@ -356,7 +358,7 @@ const TimerCard: React.FC<TimerProps> = ({
               </div>
             ) : (
               <img 
-                src={imageUrl} 
+                src={resolvedImageUrl} 
                 className="w-full h-full object-cover opacity-40" 
                 alt="Timer Background Preview" 
                 referrerPolicy="no-referrer"

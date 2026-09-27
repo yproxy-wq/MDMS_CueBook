@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { SoundConfig, SoundType } from '../../types';
 import { audioService } from '../../services/AudioService';
+import { buildFadeCurvePath, FADE_CURVES, normalizeFadeCurve } from '../../utils/fadeCurve';
 import { 
   Volume2, Repeat, Link, Upload, Trash2, 
   Play, Pause, Scissors, Zap,
@@ -257,6 +258,41 @@ const LoopSettings: React.FC<{
   </div>
 ));
 
+const FadeCurvePicker: React.FC<{
+  direction: 'in' | 'out';
+  value: SoundConfig['fadeInCurve'];
+  disabled: boolean;
+  onChange: (value: SoundConfig['fadeInCurve']) => void;
+}> = React.memo(({ direction, value, disabled, onChange }) => {
+  const selected = normalizeFadeCurve(value);
+  return (
+    <div className="space-y-1.5">
+      <svg viewBox="0 0 96 32" role="img" aria-label={(direction === 'in' ? 'フェードイン' : 'フェードアウト') + 'の変化曲線'} className="h-8 w-full rounded border border-white/10 bg-black/30">
+        <path d="M 0 31 L 96 31" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
+        <path d={buildFadeCurvePath(selected, direction)} fill="none" stroke="#7dd3fc" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+      </svg>
+      <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+        {FADE_CURVES.map((curve) => (
+          <button
+            key={curve.value}
+            type="button"
+            title={curve.description}
+            aria-label={(direction === 'in' ? 'フェードイン: ' : 'フェードアウト: ') + curve.label}
+            aria-pressed={selected === curve.value}
+            disabled={disabled}
+            onClick={() => onChange(curve.value)}
+            className={selected === curve.value
+              ? 'min-h-11 rounded-md border border-sky-300/55 bg-sky-500/15 px-1 text-[9px] font-black text-sky-100'
+              : 'min-h-11 rounded-md border border-white/10 bg-black/25 px-1 text-[9px] font-bold text-white/45 transition-colors hover:border-white/25 hover:text-white disabled:opacity-30'}
+          >
+            {curve.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+});
+
 const FadeSettings: React.FC<{
   sound: SoundConfig;
   onUpdate: (updates: Partial<SoundConfig>) => void;
@@ -267,8 +303,8 @@ const FadeSettings: React.FC<{
     </div>
     <div className="space-y-4 pt-1">
       {[
-        { field: 'fadeIn' as const, label: 'IN', enabled: sound.fadeInEnabled, dur: sound.fadeInDuration },
-        { field: 'fadeOut' as const, label: 'OUT', enabled: sound.fadeOutEnabled, dur: sound.fadeOutDuration }
+        { field: 'fadeIn' as const, label: 'IN', enabled: sound.fadeInEnabled, dur: sound.fadeInDuration, curve: sound.fadeInCurve },
+        { field: 'fadeOut' as const, label: 'OUT', enabled: sound.fadeOutEnabled, dur: sound.fadeOutDuration, curve: sound.fadeOutCurve }
       ].map(ctrl => (
         <div key={ctrl.field} className={`space-y-1.5 transition-opacity ${!ctrl.enabled && 'opacity-40 grayscale'}`}>
           <div className="flex justify-between items-baseline px-1">
@@ -308,6 +344,14 @@ const FadeSettings: React.FC<{
               <div className="w-[1.5px] h-3 bg-current" />
             </button>
           </div>
+          <FadeCurvePicker
+            direction={ctrl.field === 'fadeIn' ? 'in' : 'out'}
+            value={ctrl.curve}
+            disabled={!ctrl.enabled}
+            onChange={(curve) => onUpdate({
+              [ctrl.field === 'fadeIn' ? 'fadeInCurve' : 'fadeOutCurve']: curve,
+            })}
+          />
         </div>
       ))}
     </div>
@@ -495,4 +539,3 @@ export const SoundSettingsPanel: React.FC<SoundSettingsPanelProps> = React.memo(
     </AnimatePresence>
   );
 });
-
