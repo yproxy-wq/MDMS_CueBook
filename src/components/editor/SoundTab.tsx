@@ -92,24 +92,24 @@ export const SoundTab: React.FC<SoundTabProps> = React.memo(({
     <div className="flex flex-col h-full gap-4 animate-in fade-in duration-300">
       {/* Top Section: List */}
       <div className="flex flex-col gap-3 shrink-0">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-4">
-            <h3 className="text-[10px] font-cinzel font-bold text-white/60 uppercase tracking-[0.2em] flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+            <h3 className="text-sm font-medium text-white/70 flex items-center gap-2">
               <Music size={14} /> 音源リスト
             </h3>
-            <div className="relative w-64">
+            <div className="relative w-full min-w-0 sm:w-64">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" />
               <input 
                 value={searchQuery || ''}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="音源を検索..."
-                className="w-full bg-black/40 border border-white/10 rounded-xl py-2 pl-9 pr-3 text-xs text-white/60 outline-none focus:border-white/30 transition-all"
+                className="w-full bg-black/40 border border-white/10 rounded-lg min-h-[44px] pl-9 pr-3 text-base text-white/60 outline-none focus:border-white/30 transition-all"
               />
             </div>
           </div>
           <button 
             onClick={addSound}
-            className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-[10px] font-bold text-white/60 hover:text-white hover:bg-white/10 transition-all uppercase tracking-widest"
+            className="flex items-center gap-2 min-h-[44px] shrink-0 px-3 bg-white/5 border border-white/10 rounded-lg text-sm font-medium text-white/70 hover:text-white hover:bg-white/10 transition-all"
           >
             <Plus size={14} /> 音源を追加
           </button>

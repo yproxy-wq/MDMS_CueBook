@@ -14,32 +14,44 @@ export const NetworkToast: React.FC<NetworkToastProps> = ({ onOpenTroubleshooter
   const [isReconnecting, setIsReconnecting] = useState(false);
   const prevStatusRef = useRef(netState.status);
 
+  const restoredTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearRestoredTimer = () => {
+    if (restoredTimerRef.current !== null) clearTimeout(restoredTimerRef.current);
+    restoredTimerRef.current = null;
+  };
+
   useEffect(() => {
     const unsubscribe = networkMonitor.subscribe((newState) => {
-      // Check if connection was restored
-      if (
-        (prevStatusRef.current === 'disconnected' || prevStatusRef.current === 'unreliable') &&
-        newState.status === 'healthy'
-      ) {
-        setShowRestored(true);
-        const timer = setTimeout(() => {
-          setShowRestored(false);
-        }, 9000);
-        return () => clearTimeout(timer);
-      }
-      
+      const previousStatus = prevStatusRef.current;
       prevStatusRef.current = newState.status;
       setNetState(newState);
       setIsReconnecting(false);
+      if (previousStatus !== newState.status) setDismissedStatus(null);
+      if (previousStatus !== 'healthy' && newState.status === 'healthy') {
+        clearRestoredTimer();
+        setShowRestored(true);
+        restoredTimerRef.current = setTimeout(() => {
+          setShowRestored(false);
+          restoredTimerRef.current = null;
+        }, 9000);
+      } else if (newState.status !== 'healthy') {
+        clearRestoredTimer();
+        setShowRestored(false);
+      }
     });
-
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      clearRestoredTimer();
+      if (reconnectTimerRef.current !== null) clearTimeout(reconnectTimerRef.current);
+    };
   }, []);
 
   const handleReconnect = async () => {
     setIsReconnecting(true);
     await networkMonitor.triggerProbe();
-    setTimeout(() => setIsReconnecting(false), 1200);
+    if (reconnectTimerRef.current !== null) clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = setTimeout(() => setIsReconnecting(false), 1200);
   };
 
   const isDisconnected = netState.status === 'disconnected';
@@ -74,7 +86,8 @@ export const NetworkToast: React.FC<NetworkToastProps> = ({ onOpenTroubleshooter
               </div>
             </div>
             <button
-              onClick={() => setShowRestored(false)}
+              aria-label="復旧通知を閉じる"
+              onClick={() => { clearRestoredTimer(); setShowRestored(false); }}
               className="p-1 text-emerald-400/60 hover:text-emerald-200 transition-colors"
             >
               <X size={16} />
