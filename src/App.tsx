@@ -1,3 +1,4 @@
+import { TimerTapControl } from './components/TimerTapControl';
 import { RecommendedBgmDock } from './components/RecommendedBgmDock';
 import { SyncQuickControls } from './components/SyncQuickControls';
 import { toggleSelectedTimer } from './utils/timerNavigation';
@@ -1905,15 +1906,18 @@ function App() {
         <div className="performance-control-bar__primary flex min-w-0 items-center gap-3">
           <div
             ref={timerDropdownRef1}
-            onClick={() => {
-              setIsTimerDropdownOpen(!isTimerDropdownOpen);
-              audioService.activateAudio(state.currentScenario.title);
-            }}
-            className={`performance-control-bar__timer relative flex items-center justify-center rounded-lg border bg-zinc-950/80 px-4 py-2 shadow-xl transition-all hover:border-white/20 active:scale-95 shrink-0 cursor-pointer select-none
+            className={`performance-control-bar__timer relative flex items-center justify-center rounded-lg border bg-zinc-950/80 px-4 py-2 shadow-xl transition-all hover:border-white/20 shrink-0 select-none
               ${activeTimerState?.isRunning ? 'border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.12)]' : 'border-white/10'}`}
             style={{ borderWidth: '0px' }}
           >
-            <CompactTimerReadout timerState={activeTimerState} className="font-mono leading-none font-black tabular-nums tracking-wide transition-all duration-300" fontSize="clamp(30px, 4.8vw, 38px)" />
+            <TimerTapControl key={state.currentScenario.id + ':' + activeTimer?.id} isRunning={Boolean(activeTimerState?.isRunning)} disabled={!activeTimer} onToggle={() => onToggleTimer()}>
+              <CompactTimerReadout timerState={activeTimerState} className="font-mono leading-none font-black tabular-nums tracking-wide transition-all duration-300" fontSize="clamp(30px, 4.8vw, 38px)" />
+            </TimerTapControl>
+            <button type="button" aria-label="タイマー設定を開く" aria-expanded={isTimerDropdownOpen}
+              onClick={() => setIsTimerDropdownOpen(!isTimerDropdownOpen)}
+              className="flex h-[44px] w-[44px] shrink-0 touch-manipulation items-center justify-center rounded-lg text-white/50 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
+              <Settings size={16} aria-hidden="true" />
+            </button>
             {renderTimerDropdown()}
           </div>
           <div className="flex min-w-0 items-center gap-3">
@@ -2383,14 +2387,17 @@ function App() {
                   {/* Center Area: Elegant Draggable Cockpit Clock & Timer (Timer Digits Only) */}
                   <div 
                     ref={timerDropdownRef2}
-                    onClick={() => {
-                      setIsTimerDropdownOpen(!isTimerDropdownOpen);
-                      audioService.activateAudio(state.currentScenario.title);
-                    }}
-                    className={`relative flex items-center justify-center bg-zinc-950/80 border rounded-full px-5 py-2 hover:border-white/20 select-none shadow-xl cursor-pointer transition-all active:scale-95 shrink-0
+                    className={`relative flex items-center justify-center bg-zinc-950/80 border rounded-full px-5 py-2 hover:border-white/20 select-none shadow-xl transition-all shrink-0
                       ${activeTimerState?.isRunning ? 'border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.12)]' : 'border-white/10'}`}
                   >
-                      <CompactTimerReadout timerState={activeTimerState} className="text-[17px] md:text-[18px] font-mono leading-none font-black tabular-nums tracking-wide transition-all duration-300" />
+                      <TimerTapControl key={state.currentScenario.id + ':' + activeTimer?.id} isRunning={Boolean(activeTimerState?.isRunning)} disabled={!activeTimer} onToggle={() => onToggleTimer()}>
+                        <CompactTimerReadout timerState={activeTimerState} className="text-[17px] md:text-[18px] font-mono leading-none font-black tabular-nums tracking-wide transition-all duration-300" />
+                      </TimerTapControl>
+                      <button type="button" aria-label="タイマー設定を開く" aria-expanded={isTimerDropdownOpen}
+                        onClick={() => setIsTimerDropdownOpen(!isTimerDropdownOpen)}
+                        className="flex h-[44px] w-[44px] shrink-0 touch-manipulation items-center justify-center rounded-lg text-white/50 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
+                        <Settings size={16} aria-hidden="true" />
+                      </button>
                       {renderTimerDropdown()}
                   </div>
 

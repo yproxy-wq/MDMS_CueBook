@@ -51,6 +51,8 @@
     - Sync StudioからDropbox認可ポップアップを開き、ローカルPDFをページごとにWebP化してDropbox App folderへ直接アップロードできる。生成済みアセットはプレイヤー共有メディアとして追加され、ページ番号一覧・数字キー・`[` / `]`で切り替える。
     - 子ウィンドウは`pdfAssetId`と共有capabilityから1ページ分の短期URLをFunctionsへ要求して表示する。短期URLは有効期限の5分前に再取得し、PDF本体やDropbox認証情報は同期しない。
 3. **高精度同期タイマーエンジン**:
+   - 進行画面のコンパクトタイマー（1・2カラム）は数字の最初のタップで半透明の「開始／停止」ボタンを数字上へ表示し、2回目のボタン操作で既存のonToggleTimerを呼び、閉じる。初回タップではタイマーを変更しない。設定は隣接する44pxボタンへ分離する。
+   - TimerTapControlのローカルisOpenだけで表示を管理し、Escape・外側pointerdown・フォーカス移動で閉じる。Escape／実行後は数字へフォーカスを戻し、対象タイマー／シナリオ変更時は確認状態を破棄する。操作対象は44px以上、ネイティブbuttonとaria-label／aria-expandedでキーボード操作にも対応する。
    - `startTime` (基準時刻) に基づくドリフト補正リアルタイムタイマー。
    - Firebase Firestore (`SyncService`) を介した複数端末・子ウィンドウ間での1秒未満精度同期。
    - 同一同期パスへの短時間連続更新は最新ペイロードへ集約するが、集約中のすべての呼び出しはFirestoreへの耐久書き込みが成功または失敗するまで完了扱いにしない。ローカル同期済みキャッシュは耐久書き込み成功後にだけ更新する。
@@ -241,6 +243,7 @@
 - `src/components/Header.tsx`: マスターUI、タイマー表示、全般メニュー、ショートカットボタン
 - `src/components/EditorView.tsx`: シナリオエディタ親コンポーネント（Saved トースト、タブ切替）
 - `src/components/SoundBoard.tsx`: BGM/SE/SoundCluster 一括操作ボード
+- `src/components/TimerTapControl.tsx`: 数字タップの2手操作と表示専用ローカル状態。startTime／secondsや同期データを変更しない。
 - `src/components/TimerWorkspace.tsx`: 表示中フェーズのタイマーと、別フェーズで稼働中のタイマーを集約する専用操作欄
 - `src/components/OutlineBlock.tsx` / `src/utils/scriptOutline.ts`: ブロック単位のアウトライン開閉状態と枝境界判定
 - `src/components/editor/MediaTab.tsx`: 画像/動画の管理、ソート順操作、タグコピー
