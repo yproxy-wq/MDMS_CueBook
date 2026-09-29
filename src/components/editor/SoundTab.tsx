@@ -116,16 +116,16 @@ export const SoundTab: React.FC<SoundTabProps> = React.memo(({
         </div>
 
         <div className="flex overflow-x-auto gap-3 pb-3 scrollbar-thin scrollbar-thumb-white/10">
-          {filteredSounds.map((sound, idx) => (
+          {filteredSounds.map((sound) => (
             <div key={sound.id} className="w-56 shrink-0">
               <SoundListItem 
                 sound={sound}
                 isSelected={selectedSoundId === sound.id}
                 onClick={() => handleSelectSound(sound.id)}
                 onRemove={() => removeSound(sound.id)}
-                onMove={(dir) => moveSound(idx, dir)}
-                isFirst={idx === 0}
-                isLast={idx === sounds.length - 1}
+                onMove={(dir) => moveSound(sounds.findIndex(item => item.id === sound.id), dir)}
+                isFirst={sounds[0]?.id === sound.id}
+                isLast={sounds[sounds.length - 1]?.id === sound.id}
               />
             </div>
           ))}
@@ -145,7 +145,8 @@ export const SoundTab: React.FC<SoundTabProps> = React.memo(({
           </div>
         )}
         {selectedSound ? (
-          <SoundSettingsPanel 
+          <SoundSettingsPanel
+            key={selectedSound.id}
             sound={selectedSound}
             onUpdate={(updates) => updateSound(selectedSound.id, updates)}
             onRemove={() => removeSound(selectedSound.id)}

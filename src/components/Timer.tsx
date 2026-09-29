@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import HoldButton from './HoldButton';
 import { formatMinutesSeconds, isWarningTime } from '../utils/functionalHelper';
 import { audioService } from '../services/AudioService';
+import { LapNotificationTracker } from '../utils/LapNotificationTracker';
 import { useOwnerMediaUrl } from '../hooks/useOwnerMediaUrl';
 
 interface TimerProps {
@@ -49,53 +50,51 @@ const TimerCard: React.FC<TimerProps> = ({
     typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
   );
 
-  const triggeredLaps = React.useRef<Set<number>>(new Set());
+  const lapTracker = React.useRef(new LapNotificationTracker());
+  const lapOverlayTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeLapHighlight, setActiveLapHighlight] = useState<number | null>(null);
   const resolvedImageUrl = useOwnerMediaUrl(imageUrl);
 
   const lapTimes = config.lapTimes;
 
-  // Re-evaluation function
-  const reevaluateLaps = React.useCallback((currentSeconds: number) => {
-    triggeredLaps.current.clear();
-    if (lapTimes) {
-      lapTimes.forEach((lap) => {
-        // If current remaining time is already past this lap time, mark it as triggered
-        if (currentSeconds < lap * 60) {
-          triggeredLaps.current.add(lap);
-        }
-      });
-    }
-  }, [lapTimes]);
+  const lapScope = JSON.stringify([config.id, [...(lapTimes || [])].sort((a, b) => b - a)]);
+  useEffect(() => () => {
+    if (lapOverlayTimeout.current) clearTimeout(lapOverlayTimeout.current);
+  }, []);
 
-  // Re-evaluate on initial mount, reset, adjust, or configuration change
+  // Notification history follows actual remaining time, not config object identity.
+  const reevaluateLaps = React.useCallback((currentSeconds: number) => {
+    const reset = lapTracker.current.reconcile(lapScope, lapTimes || [], currentSeconds);
+    if (reset || currentSeconds <= 0) {
+      if (lapOverlayTimeout.current) clearTimeout(lapOverlayTimeout.current);
+      lapOverlayTimeout.current = null;
+      setActiveLapHighlight(null);
+    }
+  }, [lapScope, lapTimes]);
+
   useEffect(() => {
-    reevaluateLaps(seconds);
-  }, [seconds, lapTimes, reevaluateLaps]);
+    Promise.resolve().then(() => {
+      const elapsed = isRunning && startTime ? (Date.now() - startTime) / 1000 : 0;
+      reevaluateLaps(Math.max(0, seconds - elapsed));
+    });
+  }, [seconds, isRunning, startTime, reevaluateLaps]);
 
   const checkLapTriggers = React.useCallback((currentSeconds: number) => {
-    if (!lapTimes) return;
-    lapTimes.forEach((lap) => {
-      const lapSeconds = lap * 60;
-      // Trigger if remaining time has ticked down past this lap threshold, and we haven't fired it yet
-      if (currentSeconds > 0 && currentSeconds <= lapSeconds && !triggeredLaps.current.has(lap)) {
-        triggeredLaps.current.add(lap);
-        
-        // Play high-fidelity double-tone crystal chime
-        try {
-          audioService.playLapChime();
-        } catch (e) {
-          console.warn('Lap chime failed:', e);
-        }
-        
-        // Display beautiful high-contrast broadcast overlay for 8 seconds
-        setActiveLapHighlight(lap);
-        setTimeout(() => {
-          setActiveLapHighlight(prev => prev === lap ? null : prev);
-        }, 8000);
+    reevaluateLaps(currentSeconds);
+    lapTracker.current.takeTriggers(lapScope, lapTimes || [], currentSeconds).forEach(lap => {
+      try {
+        audioService.playLapChime();
+      } catch (e) {
+        console.warn('Lap chime failed:', e);
       }
+      setActiveLapHighlight(lap);
+      if (lapOverlayTimeout.current) clearTimeout(lapOverlayTimeout.current);
+      lapOverlayTimeout.current = setTimeout(() => {
+        lapOverlayTimeout.current = null;
+        setActiveLapHighlight(prev => prev === lap ? null : prev);
+      }, 8000);
     });
-  }, [lapTimes]);
+  }, [lapScope, lapTimes, reevaluateLaps]);
 
   useEffect(() => {
     if (!timerFlashOnPauseEnabled) return;

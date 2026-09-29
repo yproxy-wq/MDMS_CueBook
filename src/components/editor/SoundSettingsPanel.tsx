@@ -265,6 +265,21 @@ export const SoundSettingsPanel: React.FC<SoundSettingsPanelProps> = React.memo(
 }) => {
   const nameTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const urlTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingEditsRef = useRef<Partial<SoundConfig>>({});
+  const latestUpdateRef = useRef(onUpdate);
+  useEffect(() => { latestUpdateRef.current = onUpdate; }, [onUpdate]);
+  const flushEdits = useCallback(() => {
+    if (nameTimeoutRef.current) clearTimeout(nameTimeoutRef.current);
+    if (urlTimeoutRef.current) clearTimeout(urlTimeoutRef.current);
+    const updates = pendingEditsRef.current;
+    pendingEditsRef.current = {};
+    if (Object.keys(updates).length) latestUpdateRef.current(updates);
+  }, []);
+  useEffect(() => () => {
+    if (nameTimeoutRef.current) clearTimeout(nameTimeoutRef.current);
+    if (urlTimeoutRef.current) clearTimeout(urlTimeoutRef.current);
+    pendingEditsRef.current = {};
+  }, [sound.id]);
   const captureTime = useCallback((field: 'startTime' | 'endTime' | 'loopStart' | 'loopEnd') => {
     const stats = audioService.getPlaybackStats(sound.id);
     if (stats) onUpdate({ [field]: Math.round(stats.current * 100) / 100 });
@@ -289,13 +304,13 @@ export const SoundSettingsPanel: React.FC<SoundSettingsPanelProps> = React.memo(
               <div className="flex-1 min-w-0">
                <input
                  aria-label="音源名"
+                 onBlur={flushEdits}
                  defaultValue={sound.name || ''}
                  onChange={e => {
                    const val = e.target.value;
                    if (nameTimeoutRef.current) clearTimeout(nameTimeoutRef.current);
-                   nameTimeoutRef.current = setTimeout(() => {
-                     onUpdate({name: val});
-                   }, 400);
+                   pendingEditsRef.current.name = val;
+                   nameTimeoutRef.current = setTimeout(flushEdits, 400);
                  }}
                  className="bg-transparent border-none min-h-[44px] p-0 text-lg font-bold text-white outline-none w-full placeholder-white/5 truncate"
                  placeholder="音源名を入力..."
@@ -340,13 +355,13 @@ export const SoundSettingsPanel: React.FC<SoundSettingsPanelProps> = React.memo(
               <div className="group relative">
                 <input
                   aria-label="音源URL"
+                  onBlur={flushEdits}
                   defaultValue={sound.url || ''}
                   onChange={e => {
                     const val = e.target.value;
                     if (urlTimeoutRef.current) clearTimeout(urlTimeoutRef.current);
-                    urlTimeoutRef.current = setTimeout(() => {
-                      onUpdate({url: val});
-                    }, 500);
+                    pendingEditsRef.current.url = val;
+                    urlTimeoutRef.current = setTimeout(flushEdits, 500);
                   }}
                   className="w-full bg-white/5 border border-white/10 rounded-lg min-h-[44px] pl-3 pr-14 text-base font-mono text-white/70 outline-none focus:border-white/20 transition-all"
                   placeholder="URLを入力..."

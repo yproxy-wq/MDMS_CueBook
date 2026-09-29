@@ -7,6 +7,7 @@ import { audioService } from '../services/AudioService';
 import { NetworkToast } from './NetworkToast';
 import { transformDropboxUrl, getFallbackMediaUrl } from '../utils/mediaHelper';
 import { parseSessionId } from '../utils/syncHelper';
+import { LapNotificationTracker } from '../utils/LapNotificationTracker';
 
 interface TimerShareViewProps {
   sessionId: string;
@@ -75,15 +76,31 @@ const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }
   const [syncing, setSyncing] = useState(false);
   const [currentUser, setCurrentUser] = useState(auth.currentUser);
 
-  const triggeredLaps = useRef<Set<number>>(new Set());
+  const lapTracker = useRef(new LapNotificationTracker());
+  const lapOverlayTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeLapHighlight, setActiveLapHighlight] = useState<number | null>(null);
   const [fallbackImageUrls, setFallbackImageUrls] = useState<Record<string, string>>({});
 
   const lapTimes = data?.lapTimes;
 
-  // Re-evaluation function
+  const lapScope = JSON.stringify([
+    sessionId, data?.scenarioId, data?.phaseId, data?.timerId,
+    data?.lapDisplayMode || 'overlay',
+    [...(lapTimes || [])].sort((a, b) => b - a),
+  ]);
+
+  useEffect(() => () => {
+    if (lapOverlayTimeout.current) clearTimeout(lapOverlayTimeout.current);
+  }, []);
+
+  // Seed elapsed laps only on joining, changing timers, or rewinding.
   const reevaluateLaps = useCallback((currentSeconds: number) => {
-    triggeredLaps.current.clear();
+    const reset = lapTracker.current.reconcile(lapScope, lapTimes || [], currentSeconds);
+    if (!reset) return;
+    if (lapOverlayTimeout.current) {
+      clearTimeout(lapOverlayTimeout.current);
+      lapOverlayTimeout.current = null;
+    }
     
     if (currentSeconds <= 0) {
       setActiveLapHighlight(null);
@@ -95,7 +112,6 @@ const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }
       const sortedLaps = [...lapTimes].sort((a, b) => b - a);
       sortedLaps.forEach((lap) => {
         if (currentSeconds <= lap * 60) {
-          triggeredLaps.current.add(lap);
           activeLap = lap;
         }
       });
@@ -107,18 +123,20 @@ const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }
     } else {
       setActiveLapHighlight(null);
     }
-  }, [lapTimes, data?.lapDisplayMode]);
+  }, [lapScope, lapTimes, data?.lapDisplayMode]);
 
   // Re-evaluate on initial sync data load or sync updates
   useEffect(() => {
     if (data) {
       Promise.resolve().then(() => {
-        reevaluateLaps(data.remainingSeconds);
+        const elapsed = data.isRunning && data.startTime ? (Date.now() - data.startTime) / 1000 : 0;
+        reevaluateLaps(Math.max(0, data.remainingSeconds - elapsed));
       });
     }
   }, [data, reevaluateLaps]);
 
   const checkLapTriggers = useCallback((currentSeconds: number) => {
+    reevaluateLaps(currentSeconds);
     if (!lapTimes) return;
     
     // Auto-clear active highlights when timer is 00:00
@@ -127,32 +145,30 @@ const TimerShareView: React.FC<TimerShareViewProps> = ({ sessionId, themeColor }
       return;
     }
 
-    lapTimes.forEach((lap) => {
-      const lapSeconds = lap * 60;
-      if (currentSeconds > 0 && currentSeconds <= lapSeconds && !triggeredLaps.current.has(lap)) {
-        triggeredLaps.current.add(lap);
-        
-        // Play high-fidelity double-tone crystal chime on player side
-        try {
-          audioService.playLapChime();
-        } catch (e) {
-          console.warn('Player lap chime failed:', e);
-        }
-        
-        const mode = data?.lapDisplayMode || 'overlay';
-        if (mode !== 'hidden') {
-          setActiveLapHighlight(lap);
-          
-          if (mode === 'overlay') {
-            // Display beautiful broadcast overlay for 8 seconds
-            setTimeout(() => {
-              setActiveLapHighlight(prev => prev === lap ? null : prev);
-            }, 8000);
-          }
+    lapTracker.current.takeTriggers(lapScope, lapTimes, currentSeconds).forEach((lap) => {
+
+      // Play high-fidelity double-tone crystal chime on player side
+      try {
+        audioService.playLapChime();
+      } catch (e) {
+        console.warn('Player lap chime failed:', e);
+      }
+
+      const mode = data?.lapDisplayMode || 'overlay';
+      if (mode !== 'hidden') {
+        setActiveLapHighlight(lap);
+
+        if (mode === 'overlay') {
+          // Keep one expiration timer for the current overlay.
+          if (lapOverlayTimeout.current) clearTimeout(lapOverlayTimeout.current);
+          lapOverlayTimeout.current = setTimeout(() => {
+            lapOverlayTimeout.current = null;
+            setActiveLapHighlight(prev => prev === lap ? null : prev);
+          }, 8000);
         }
       }
     });
-  }, [lapTimes, data?.lapDisplayMode]);
+  }, [lapScope, lapTimes, data?.lapDisplayMode, reevaluateLaps]);
 
   useEffect(() => {
     return auth.onAuthStateChanged((user) => {

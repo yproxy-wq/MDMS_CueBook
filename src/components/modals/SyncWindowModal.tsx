@@ -593,13 +593,15 @@ const SyncWindowModal: React.FC<SyncWindowModalProps> = ({
                       </div>
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={onResetTimer}
+                          aria-label="タイマーをリセット"
+                          onClick={() => onResetTimer()}
                           className="p-3 rounded-xl bg-white/5 text-white/40 hover:text-white transition-all border border-white/10"
                         >
                           <RotateCcw size={18} />
                         </button>
                         <button
-                          onClick={onToggleTimer}
+                          aria-label={isTimerRunning ? 'タイマーを停止' : 'タイマーを開始'}
+                          onClick={() => onToggleTimer()}
                           className={`p-3 px-6 rounded-xl transition-all border ${isTimerRunning ? 'bg-amber-500/20 border-amber-400/50 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'bg-emerald-500 text-white border-emerald-400'}`}
                         >
                           {isTimerRunning ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}

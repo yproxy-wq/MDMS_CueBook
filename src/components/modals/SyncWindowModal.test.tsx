@@ -36,7 +36,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-const show = async (onApplySync = vi.fn()) => {
+const show = async (onApplySync = vi.fn(), onToggleTimer = vi.fn(), onResetTimer = vi.fn()) => {
   await act(() => root.render(
     <SyncWindowModal
       isOpen
@@ -44,8 +44,8 @@ const show = async (onApplySync = vi.fn()) => {
       onShareSync={() => 'https://example.test/share'}
       onApplySync={onApplySync}
       syncConfig={syncConfig}
-      onToggleTimer={vi.fn()}
-      onResetTimer={vi.fn()}
+      onToggleTimer={onToggleTimer}
+      onResetTimer={onResetTimer}
       onResetSync={vi.fn()}
       availableMedia={media}
       scenarioId="scenario"
@@ -79,5 +79,18 @@ describe('SyncWindowModal content picker', () => {
     await act(() => openGallery.click());
 
     expect(document.body.querySelector('#sync-media-gallery')).not.toBeNull();
+  });
+});
+
+
+describe('Sync Studio timer control argument boundaries', () => {
+  it('calls timer operations without passing the browser event as a timer ID', async () => {
+    const toggle = vi.fn();
+    const reset = vi.fn();
+    await show(vi.fn(), toggle, reset);
+    await act(() => (document.querySelector('[aria-label="タイマーを開始"]') as HTMLButtonElement).click());
+    await act(() => (document.querySelector('[aria-label="タイマーをリセット"]') as HTMLButtonElement).click());
+    expect(toggle.mock.calls).toEqual([[]]);
+    expect(reset.mock.calls).toEqual([[]]);
   });
 });

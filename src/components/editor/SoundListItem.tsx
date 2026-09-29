@@ -30,6 +30,7 @@ export const SoundListItem: React.FC<SoundListItemProps> = React.memo(({
       <div className="flex flex-col gap-0 opacity-0 group-hover:opacity-100 transition-opacity">
         <button 
           onClick={(e) => { e.stopPropagation(); onMove('up'); }}
+          aria-label={sound.name + 'を上へ移動'}
           disabled={isFirst}
           className="p-0 text-white/20 hover:text-white disabled:opacity-0"
         >
@@ -37,6 +38,7 @@ export const SoundListItem: React.FC<SoundListItemProps> = React.memo(({
         </button>
         <button 
           onClick={(e) => { e.stopPropagation(); onMove('down'); }}
+          aria-label={sound.name + 'を下へ移動'}
           disabled={isLast}
           className="p-0 text-white/20 hover:text-white disabled:opacity-0"
         >
