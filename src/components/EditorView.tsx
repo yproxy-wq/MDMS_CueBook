@@ -1,7 +1,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Scenario, SoundConfig } from '../types';
-import { 
+import {
   Palette, Music, Users, FileText, Fingerprint, Image as ImageIcon, Undo2, Redo2, Camera, Check, Keyboard
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -31,8 +31,8 @@ interface EditorViewProps {
   onRedo?: () => void;
 }
 
-const EditorView: React.FC<EditorViewProps> = React.memo(({ 
-  scenario, user, onUpdate, canUndo = false, canRedo = false, onUndo, onRedo 
+const EditorView: React.FC<EditorViewProps> = React.memo(({
+  scenario, user, onUpdate, canUndo = false, canRedo = false, onUndo, onRedo
 }) => {
   const [activeTab, setActiveTab] = useState<'phases' | 'sounds' | 'characters' | 'scenario' | 'identity' | 'media' | 'snapshots'>('phases');
   const [previewingSoundId, setPreviewingSoundId] = useState<string | null>(null);
@@ -86,13 +86,37 @@ const EditorView: React.FC<EditorViewProps> = React.memo(({
     }
   }, [phases]);
 
+  const previewRevision = useRef(0);
+  const previewIdRef = useRef<string | null>(null);
+  useEffect(() => () => {
+    previewRevision.current += 1;
+    if (previewIdRef.current) audioService.stop(previewIdRef.current);
+    previewIdRef.current = null;
+  }, [scenario.id]);
+
+  useEffect(() => {
+    if (previewingSoundId && !scenario.sounds.some(sound => sound.id === previewingSoundId)) {
+      previewIdRef.current = null;
+      previewRevision.current += 1;
+    }
+  }, [previewingSoundId, scenario.sounds]);
+
   const togglePreview = useCallback(async (sound: SoundConfig) => {
     if (previewingSoundId && previewingSoundId !== sound.id) {
       audioService.stop(previewingSoundId);
     }
-    
-    await audioService.play(sound, () => setPreviewingSoundId(null));
-    setPreviewingSoundId(sound.id);
+
+    const revision = ++previewRevision.current;
+    previewIdRef.current = sound.id;
+    try {
+      const played = await audioService.playPreview(sound, () => {
+        if (previewIdRef.current === sound.id) setPreviewingSoundId(null);
+      });
+      if (revision === previewRevision.current) setPreviewingSoundId(played ? sound.id : null);
+    } catch (error) {
+      if (revision === previewRevision.current) setPreviewingSoundId(null);
+      console.warn('音源の試聴に失敗しました。', error);
+    }
   }, [previewingSoundId]);
 
   const toolbarPos = scenario.editorToolbarPosition || 'left';
@@ -111,28 +135,28 @@ const EditorView: React.FC<EditorViewProps> = React.memo(({
         <button onClick={() => setActiveTab('media')} className={`p-3 rounded-lg transition-all ${activeTab === 'media' ? 'bg-white/10 text-white' : 'text-white/20 hover:text-white/40'}`} title="画像リソース"><ImageIcon size={20} /></button>
         <button onClick={() => setActiveTab('snapshots')} className={`p-3 rounded-lg transition-all ${activeTab === 'snapshots' ? 'bg-white/10 text-white' : 'text-white/20 hover:text-white/40'}`} title="シナリオスナップショット"><Camera size={20} /></button>
         <button onClick={() => setActiveTab('identity')} className={`p-3 rounded-lg transition-all ${activeTab === 'identity' ? 'bg-white/10 text-white' : 'text-white/20 hover:text-white/40'}`} title="プロジェクトID"><Fingerprint size={20} /></button>
-        
+
         {/* Undo/Redo & Shortcuts Section */}
         <div className={`flex ${toolbarPos === 'bottom' ? 'flex-row items-center gap-4 ml-6 border-l pl-6 border-white/10' : 'flex-col items-center gap-4 mt-auto border-t pt-6 border-white/10'}`}>
-          <button 
+          <button
             onClick={() => setShowShortcuts(true)}
             className="p-2.5 rounded-lg text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 transition-all cursor-pointer"
             title="ショートカットキー一覧 (Keyboard Shortcuts)"
           >
             <Keyboard size={18} />
           </button>
-          <button 
-            disabled={!canUndo} 
-            onClick={onUndo} 
-            className={`p-2.5 rounded-lg transition-all ${canUndo ? 'text-zinc-400 hover:text-white hover:bg-white/5 cursor-pointer' : 'text-white/5 cursor-not-allowed'}`} 
+          <button
+            disabled={!canUndo}
+            onClick={onUndo}
+            className={`p-2.5 rounded-lg transition-all ${canUndo ? 'text-zinc-400 hover:text-white hover:bg-white/5 cursor-pointer' : 'text-white/5 cursor-not-allowed'}`}
             title="元に戻す (Ctrl+Z)"
           >
             <Undo2 size={18} />
           </button>
-          <button 
-            disabled={!canRedo} 
-            onClick={onRedo} 
-            className={`p-2.5 rounded-lg transition-all ${canRedo ? 'text-zinc-400 hover:text-white hover:bg-white/5 cursor-pointer' : 'text-white/5 cursor-not-allowed'}`} 
+          <button
+            disabled={!canRedo}
+            onClick={onRedo}
+            className={`p-2.5 rounded-lg transition-all ${canRedo ? 'text-zinc-400 hover:text-white hover:bg-white/5 cursor-pointer' : 'text-white/5 cursor-not-allowed'}`}
             title="やり直す (Ctrl+Y / Ctrl+Shift+Z)"
           >
             <Redo2 size={18} />
@@ -143,7 +167,7 @@ const EditorView: React.FC<EditorViewProps> = React.memo(({
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden relative bg-black/40">
         <div className="flex-1 overflow-y-auto p-4 md:p-10 max-w-5xl mx-auto w-full scrollbar-thin">
-          
+
           {activeTab === 'scenario' && (
             <ScenarioTab scenario={scenario} onUpdate={updateScenario} />
           )}
@@ -153,18 +177,25 @@ const EditorView: React.FC<EditorViewProps> = React.memo(({
           )}
 
           {activeTab === 'sounds' && (
-            <SoundTab 
-              scenario={scenario} 
-              onUpdate={onUpdate} 
-              previewingSoundId={previewingSoundId} 
-              onTogglePreview={togglePreview} 
+            <SoundTab
+              scenario={scenario}
+              onUpdate={onUpdate}
+              previewingSoundId={scenario.sounds.some(sound => sound.id === previewingSoundId) ? previewingSoundId : null}
+              onTogglePreview={togglePreview}
+              onStopPreview={soundId => {
+                if (previewIdRef.current === soundId || previewingSoundId === soundId) {
+                  previewRevision.current += 1;
+                  previewIdRef.current = null;
+                  setPreviewingSoundId(null);
+                }
+              }}
             />
           )}
 
           {activeTab === 'phases' && (
-            <PhasesTab 
-              scenario={scenario} 
-              onUpdate={updateScenario} 
+            <PhasesTab
+              scenario={scenario}
+              onUpdate={updateScenario}
               collapsedPhases={collapsedPhases}
               onToggleCollapse={togglePhaseCollapse}
               onSetAllCollapsed={setAllCollapsed}
@@ -173,17 +204,17 @@ const EditorView: React.FC<EditorViewProps> = React.memo(({
           )}
 
           {activeTab === 'media' && (
-            <MediaTab 
-              scenario={scenario} 
+            <MediaTab
+              scenario={scenario}
               user={user}
-              onUpdate={updateScenario} 
+              onUpdate={updateScenario}
             />
           )}
 
           {activeTab === 'snapshots' && (
-            <SnapshotsTab 
-              scenario={scenario} 
-              onUpdate={updateScenario} 
+            <SnapshotsTab
+              scenario={scenario}
+              onUpdate={updateScenario}
             />
           )}
 

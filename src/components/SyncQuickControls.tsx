@@ -21,7 +21,7 @@ export const SyncQuickControls: React.FC<SyncQuickControlsProps> = React.memo(({
   const timerVisible = isSyncTimerVisible(syncConfig);
 
   const controls = (
-      <div className="sync-quick-controls__actions flex min-h-11 min-w-0 items-center gap-2">
+      <div className="sync-quick-controls__actions flex min-h-[44px] min-w-0 items-center gap-2">
         <div className="hidden shrink-0 items-center gap-2 sm:flex">
           <MonitorUp size={15} className="text-sky-300" />
           <span className="text-[9px] font-black uppercase tracking-[0.18em] text-white/40">子画面</span>
@@ -33,8 +33,8 @@ export const SyncQuickControls: React.FC<SyncQuickControlsProps> = React.memo(({
           aria-pressed={timerVisible}
           onClick={() => onSetTimerVisible(!timerVisible)}
           className={timerVisible
-            ? 'flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-sky-400/45 bg-sky-500/15 px-2.5 text-[11px] font-bold text-sky-100 transition-colors hover:bg-sky-500/25'
-            : 'flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 text-[11px] font-bold text-white/55 transition-colors hover:text-white'}
+            ? 'flex min-h-[44px] min-w-[44px] shrink-0 items-center gap-1.5 rounded-lg border border-sky-400/45 bg-sky-500/15 px-2.5 text-[11px] font-bold text-sky-100 transition-colors hover:bg-sky-500/25'
+            : 'flex min-h-[44px] min-w-[44px] shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 text-[11px] font-bold text-white/55 transition-colors hover:text-white'}
         >
           {timerVisible ? <Eye size={15} /> : <EyeOff size={15} />}
           タイマー {timerVisible ? '表示中' : '非表示'}
@@ -44,7 +44,7 @@ export const SyncQuickControls: React.FC<SyncQuickControlsProps> = React.memo(({
           type="button"
           aria-label="同期画面の詳細設定を開く"
           onClick={onOpenSyncStudio}
-          className="flex min-h-11 shrink-0 items-center gap-1 rounded-lg border border-white/10 px-2 text-[10px] font-bold text-white/60 transition-colors hover:border-sky-300/35 hover:text-sky-100"
+          className="flex min-h-[44px] min-w-[44px] shrink-0 items-center gap-1 rounded-lg border border-white/10 px-2 text-[10px] font-bold text-white/60 transition-colors hover:border-sky-300/35 hover:text-sky-100"
         >
           <Settings2 size={14} />
           <span className="hidden sm:inline">SYNC</span>

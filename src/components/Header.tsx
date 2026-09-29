@@ -310,7 +310,7 @@ const Header: React.FC<HeaderProps> = React.memo(({
   return (
     <>
       <header 
-        className={`h-14 md:h-16 bg-[#0a0a0b] border-b border-white/10 flex items-center px-4 md:px-6 justify-between shrink-0 shadow-2xl relative transition-all duration-300 z-50`}
+        className={`h-auto min-h-14 md:h-16 bg-[#0a0a0b] border-b border-white/10 grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 py-1 md:py-0 md:flex items-center px-3 md:px-6 justify-between shrink-0 shadow-2xl relative transition-all duration-300 z-50`}
       >
         <div className="flex items-center gap-2 lg:gap-5 min-w-0 h-full">
           <button 
@@ -320,7 +320,7 @@ const Header: React.FC<HeaderProps> = React.memo(({
           >
             <div className="flex items-center gap-1 lg:gap-2 self-stretch relative">
               <div className="flex flex-col justify-center -space-y-1 md:-space-y-1.5 shrink-0">
-                <h1 className="text-[20px] md:text-[24px] font-cinzel font-black tracking-widest text-[#d8d8d8] flex items-center relative isolate pl-2 md:pl-3">
+                <h1 className="text-[16px] md:text-[24px] font-cinzel font-black tracking-widest text-[#d8d8d8] flex items-center relative isolate pl-2 md:pl-3">
                   <img 
                     src="https://raw.githubusercontent.com/yproxy-wq/MDMS_CueBook/refs/heads/main/nib.png" 
                     alt="Nib" 
@@ -623,19 +623,21 @@ const Header: React.FC<HeaderProps> = React.memo(({
               )}
           </div>
 
-        {!isEditorMode && showVolume && (
-          <div className="flex flex-1 max-w-[10rem] md:max-w-xs mx-1 md:mx-6 items-center gap-1 md:gap-4 p-1 px-3 md:px-4 bg-white/10 border border-white/20 rounded-xl group/vol min-w-[5rem] md:min-w-[10rem] animate-in fade-in slide-in-from-top-1 duration-500">
+        {showVolume && (
+          <div className="col-span-2 row-start-2 md:row-auto flex w-full md:w-auto md:flex-1 md:max-w-xs mx-0 md:mx-6 items-center gap-1 md:gap-4 p-1 px-3 md:px-4 bg-white/10 border border-white/20 rounded-xl group/vol min-w-[5rem] md:min-w-[10rem] animate-in fade-in slide-in-from-top-1 duration-500 md:order-none">
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <Volume2 size={14} className="text-white/85 shrink-0 group-hover/vol:text-white transition-colors" />
               <input 
+                aria-label="マスター音量" aria-valuetext={`${Math.round((volume || 0) * 100)}%`}
                 type="range" min="0" max="1" step="0.01" value={volume || 0}
                 onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
-                className="flex-1 h-1.5 bg-white/20 rounded-full appearance-none cursor-pointer accent-white hover:accent-yellow-400 transition-all min-w-0 ring-offset-black"
+                className="flex-1 h-[44px] cursor-pointer accent-white hover:accent-yellow-400 transition-all min-w-0 ring-offset-black"
               />
             </div>
             <button 
               onClick={onToggleDucking}
-              className={`hidden md:flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black font-cinzel tracking-widest transition-all border shrink-0
+              aria-label="話す間BGMを下げる" aria-pressed={isDucking} title="話す間BGMを下げる"
+              className={`flex min-h-[44px] items-center gap-1 px-2 rounded-full text-[9px] font-black font-cinzel tracking-widest transition-all border shrink-0
                 ${isDucking ? 'bg-red-500/20 text-red-500 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'bg-white/10 text-white/75 border-white/25 hover:bg-white/15 hover:text-white/95'}`}
             >
               <span className={isDucking ? 'opacity-35' : 'opacity-100'}>BGM</span>
@@ -645,15 +647,15 @@ const Header: React.FC<HeaderProps> = React.memo(({
           </div>
         )}
 
-        <div className="flex items-center gap-1 lg:gap-4 shrink-0 h-full ml-auto">
+        <div className="col-start-2 row-start-1 flex items-center gap-0 lg:gap-4 shrink-0 h-full ml-auto">
           {isEditorMode && (
             <button
               onClick={onToggleEditor}
               className="p-2 rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 text-white/60 hover:text-white transition-all flex items-center gap-1.5 border border-white/10 shadow-sm mr-1.5 duration-150"
-              title="通常モード（GM画面）に戻る"
+              aria-label="GM画面に戻る" title="通常モード（GM画面）に戻る"
             >
               <ChevronLeft size={16} />
-              <span className="text-[10px] font-bold font-sans tracking-widest text-white/80 leading-none">GM画面に戻る</span>
+              <span className="hidden md:inline text-[10px] font-bold font-sans tracking-widest text-white/80 leading-none">GM画面に戻る</span>
             </button>
           )}
 

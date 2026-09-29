@@ -49,12 +49,41 @@ export const SoundCard: React.FC<SoundCardProps> = React.memo(({
   isNarrow = false,
   onToggleSound,
   onPlaySound,
-  onStopSound,
-  onUpdateSoundConfig
+  onStopSound
 }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const [hasFocus, setHasFocus] = useState(false);
+  const heldRef = useRef(false);
   const isHold = sound.triggerMode === 'hold';
   const cardRef = useRef<HTMLDivElement>(null);
+
+  const releaseHeldSound = () => {
+    if (!heldRef.current) return;
+    heldRef.current = false;
+    onStopSound?.(sound.id);
+  };
+  const startHeldSound = () => {
+    if (heldRef.current || !onPlaySound) return;
+    heldRef.current = true;
+    onPlaySound(sound);
+  };
+  useEffect(() => {
+    const release = () => {
+      if (heldRef.current) {
+        heldRef.current = false;
+        onStopSound?.(sound.id);
+      }
+    };
+    const visibility = () => { if (document.hidden) release(); };
+    window.addEventListener('blur', release);
+    document.addEventListener('visibilitychange', visibility);
+    return () => {
+      window.removeEventListener('blur', release);
+      document.removeEventListener('visibilitychange', visibility);
+      release();
+    };
+  }, [sound.id, onStopSound]);
+  const controlsVisible = isHovered || hasFocus;
 
   // Auto-clear hover state when clicked outside on touch devices
   useEffect(() => {
@@ -97,17 +126,47 @@ export const SoundCard: React.FC<SoundCardProps> = React.memo(({
     <div
       ref={cardRef}
       onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      role="group"
+      aria-label={sound.name + (isHold ? '：押している間再生' : '：音源操作')}
+      tabIndex={0}
+      onFocus={() => setHasFocus(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setHasFocus(false);
+          releaseHeldSound();
+        }
+      }}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === 'Escape') {
+          event.stopPropagation();
+          setIsHovered(false);
+          releaseHeldSound();
+        } else if (event.key === ' ' || event.key === 'Enter') {
+          event.preventDefault();
+          event.stopPropagation();
+          if (isHold && !event.repeat) startHeldSound();
+          else if (!isHold) setHasFocus(true);
+        }
+      }}
+      onKeyUp={(event) => {
+        if (event.target === event.currentTarget && (event.key === ' ' || event.key === 'Enter')) {
+          event.preventDefault();
+          event.stopPropagation();
+          releaseHeldSound();
+        }
+      }}
+      onMouseLeave={() => { setIsHovered(false); releaseHeldSound(); }}
       onMouseDown={() => {
-        if (isHold && onPlaySound) onPlaySound(sound);
+        if (isHold) startHeldSound();
       }}
       onMouseUp={() => {
-        if (isHold && onStopSound) onStopSound(sound.id);
+        if (isHold) releaseHeldSound();
       }}
       onTouchStart={(e) => {
         if (isHold && onPlaySound) {
           e.preventDefault();
-          onPlaySound(sound);
+          startHeldSound();
         } else if (!isHold && !isHovered) {
           // On mobile, first touch opens the controls overlay
           e.preventDefault();
@@ -117,19 +176,20 @@ export const SoundCard: React.FC<SoundCardProps> = React.memo(({
       onTouchEnd={(e) => {
         if (isHold && onStopSound) {
           e.preventDefault();
-          onStopSound(sound.id);
+          releaseHeldSound();
         }
       }}
+      onTouchCancel={releaseHeldSound}
       style={{
         borderColor: active ? customColor : isLinked ? 'rgba(255, 253, 240, 0.5)' : 'rgba(255,255,255,0.20)',
         boxShadow: active ? `0 0 12px ${customColor}22` : 'none'
       }}
-      className={`relative group rounded-xl flex flex-col gap-1 transition-all duration-300 border overflow-hidden select-none
+      className={`relative group focus-visible:outline focus-visible:outline-2 focus-visible:outline-white rounded-xl flex flex-col gap-1 transition-all duration-300 border overflow-hidden select-none
         ${isNarrow ? 'px-2 py-2' : 'px-2.5 py-2.5'}
-        ${active 
-          ? `bg-black/90 backdrop-blur-md ring-1 ring-inset ring-white/10` 
-          : isLinked 
-            ? `bg-[#fffdf0]/10 hover:bg-[#fffdf0]/15` 
+        ${active
+          ? `bg-black/90 backdrop-blur-md ring-1 ring-inset ring-white/10`
+          : isLinked
+            ? `bg-[#fffdf0]/10 hover:bg-[#fffdf0]/15`
             : `bg-white/[0.08] hover:bg-white/[0.14]`
         }
         ${isHold && active ? 'scale-[0.98] shadow-inner translate-y-0.5' : 'hover:scale-[1.01] active:scale-98'}
@@ -158,13 +218,13 @@ export const SoundCard: React.FC<SoundCardProps> = React.memo(({
           <PlaybackStatsDisplay soundId={sound.id} />
         )}
       </div>
-      
+
       <div className="w-full flex items-center gap-2">
         <span className="text-[7.5px] font-black uppercase font-cinzel tracking-wider opacity-65" style={{ color: active ? customColor : undefined }}>
           {sound.type}
         </span>
-        
-        {/* IN, OUT, LOOP triggers */}
+
+        {/* IN, OUT, LOOP are read-only status indicators; editing belongs in the editor. */}
         <div className="flex gap-1.5 ml-auto shrink-0 z-10">
           {[
             { label: isNarrow ? 'I' : 'IN', field: 'fadeInEnabled' as const, color: 'text-sky-400' },
@@ -173,15 +233,12 @@ export const SoundCard: React.FC<SoundCardProps> = React.memo(({
           ].map(indicator => {
             const isEnabled = !!sound[indicator.field];
             return (
-              <span 
+              <span
                 key={indicator.label}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUpdateSoundConfig?.(sound.id, { [indicator.field]: !isEnabled });
-                }}
-                className={`text-[8px] font-black px-1.5 rounded-sm border transition-all cursor-pointer flex items-center justify-center min-w-[1.5rem] h-[18px]
-                  ${isEnabled 
-                    ? `border-white/20 ${indicator.color} bg-white/10 shadow-[0_0_8px_rgba(255,255,255,0.05)]` 
+                aria-label={({ fadeInEnabled: 'フェードイン', fadeOutEnabled: 'フェードアウト', loopEnabled: 'ループ' })[indicator.field] + (isEnabled ? '：有効' : '：無効')}
+                className={`text-[8px] font-black px-1.5 rounded-sm border transition-all flex items-center justify-center min-w-[1.5rem] h-[18px]
+                  ${isEnabled
+                    ? `border-white/20 ${indicator.color} bg-white/10 shadow-[0_0_8px_rgba(255,255,255,0.05)]`
                     : 'border-white/10 text-white/35 bg-transparent opacity-60 hover:opacity-100 hover:text-white'
                   }`}
               >
@@ -192,31 +249,39 @@ export const SoundCard: React.FC<SoundCardProps> = React.memo(({
         </div>
       </div>
 
-      {/* 
+      {/*
         Sleek Audio Overlays according to rule:
         - "再生されていないものは "停止" の半透明UIが表示されるようにしよう。"
         - "カーソルか、1回タップしたときに、"停止"から"再生" と、"最初から再生" ボタンに代わる感じで。"
         - "再生中はもちろん、"再生"。"
       */}
       {!isHold && (
-        <div 
+        <div
           className={`absolute inset-0 flex items-center justify-center transition-all duration-300 rounded-xl overflow-hidden
-            ${isHovered 
-              ? 'bg-black/85 opacity-100 backdrop-blur-[3px] pointer-events-auto' 
-              : active 
+            ${controlsVisible
+              ? 'bg-black/85 opacity-100 backdrop-blur-[3px] pointer-events-auto'
+              : active
                 ? 'bg-emerald-500/[0.03] opacity-100 pointer-events-none'
                 : 'bg-black/15 opacity-100 pointer-events-none'
             }
           `}
         >
-          {isHovered ? (
+          {controlsVisible ? (
             /* Hover Controls State */
             <div className="flex items-center gap-1.5 w-full h-full px-4 animate-in fade-in zoom-in-95 duration-150">
-              <button 
+              <button
+                type="button"
+                aria-label={sound.name + (active ? 'を停止' : 'を再生')}
+                onKeyDown={(event) => {
+                  if (event.key === ' ' || event.key === 'Enter') {
+                    event.preventDefault(); event.stopPropagation();
+                    if (!event.repeat) event.currentTarget.click();
+                  }
+                }}
                 onClick={handlePlayOrStop}
-                className={`flex-1 py-1.5 px-2 rounded-md font-sans text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 transition-all active:scale-95 border cursor-pointer
-                  ${active 
-                    ? 'bg-red-500/15 text-red-400 border-red-500/20 hover:bg-red-500/25 hover:text-red-300' 
+                className={`flex-1 min-h-[44px] py-1.5 px-2 rounded-md font-sans text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 transition-all active:scale-95 border cursor-pointer
+                  ${active
+                    ? 'bg-red-500/15 text-red-400 border-red-500/20 hover:bg-red-500/25 hover:text-red-300'
                     : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/25 hover:text-emerald-300'
                   }`}
               >
@@ -232,9 +297,17 @@ export const SoundCard: React.FC<SoundCardProps> = React.memo(({
                   </>
                 )}
               </button>
-              <button 
+              <button
+                type="button"
+                aria-label={sound.name + 'を最初から再生'}
+                onKeyDown={(event) => {
+                  if (event.key === ' ' || event.key === 'Enter') {
+                    event.preventDefault(); event.stopPropagation();
+                    if (!event.repeat) event.currentTarget.click();
+                  }
+                }}
                 onClick={handlePlayFromStart}
-                className="flex-1 py-1.5 px-2 bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/20 hover:border-sky-500/35 text-sky-400 hover:text-sky-300 font-sans text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 transition-all active:scale-95 cursor-pointer"
+                className="flex-1 min-h-[44px] py-1.5 px-2 bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/20 hover:border-sky-500/35 text-sky-400 hover:text-sky-300 font-sans text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 transition-all active:scale-95 cursor-pointer"
               >
                 <RotateCcw size={10} />
                 最初から
@@ -245,14 +318,14 @@ export const SoundCard: React.FC<SoundCardProps> = React.memo(({
             <div className="flex items-center justify-center pointer-events-none w-full h-full select-none">
               {active ? (
                 /* Centered Video-style Playing Icon (Triangle) */
-                <div className="flex items-center justify-center w-11 h-11 rounded-full bg-emerald-500/10 border border-emerald-500/30 shadow-[0_0_16px_rgba(16,185,129,0.25)] text-emerald-400">
+                <div className="flex items-center justify-center w-11 h-[44px] rounded-full bg-emerald-500/10 border border-emerald-500/30 shadow-[0_0_16px_rgba(16,185,129,0.25)] text-emerald-400">
                   <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current stroke-none ml-0.5 animate-pulse" xmlns="http://www.w3.org/2000/svg">
                     <path d="M8 5v14l11-7z" strokeLinejoin="round" strokeLinecap="round" />
                   </svg>
                 </div>
               ) : (
                 /* Centered Video-style Stopped Icon (Square) */
-                <div className="flex items-center justify-center w-11 h-11 rounded-full bg-black/60 border border-white/35 text-white/75 transition-all duration-300 group-hover:border-white/50 group-hover:text-white shadow-lg">
+                <div className="flex items-center justify-center w-11 h-[44px] rounded-full bg-black/60 border border-white/35 text-white/75 transition-all duration-300 group-hover:border-white/50 group-hover:text-white shadow-lg">
                   <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current stroke-none" xmlns="http://www.w3.org/2000/svg">
                     <rect x="5" y="5" width="14" height="14" rx="1.5" />
                   </svg>

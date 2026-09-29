@@ -1,5 +1,5 @@
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { audioService } from '../services/AudioService';
 import { SoundConfig, AppState } from '../types';
 
@@ -8,6 +8,7 @@ export function useAudioController(
   setState: React.Dispatch<React.SetStateAction<AppState>>,
   activateAudioWithPrefs: () => void
 ) {
+  const stopRevision = useRef(0);
   useEffect(() => { 
     audioService.setVolume(state.volume); 
   }, [state.volume]);
@@ -16,12 +17,20 @@ export function useAudioController(
     audioService.setDucking(state.isDucking); 
   }, [state.isDucking]);
 
-  const handleStopSound = useCallback((soundId: string) => {
-    audioService.stop(soundId);
-    setState(prev => ({ ...prev, isPlaying: { ...prev.isPlaying, [soundId]: false } }));
+  const handleStopAllSounds = useCallback(() => {
+    stopRevision.current += 1;
+    audioService.stopAll();
+    setState(prev => ({ ...prev, isPlaying: {} }));
   }, [setState]);
 
+  const handleStopSound = useCallback((soundId: string) => {
+    if (soundId === 'all') { handleStopAllSounds(); return; }
+    audioService.stop(soundId);
+    setState(prev => ({ ...prev, isPlaying: { ...prev.isPlaying, [soundId]: false } }));
+  }, [setState, handleStopAllSounds]);
+
   const handlePlaySound = useCallback(async (sound: SoundConfig) => {
+    const revision = stopRevision.current;
     activateAudioWithPrefs();
     const updatedIsPlaying = { ...state.isPlaying, [sound.id]: true };
     if (sound.chokeGroup) {
@@ -35,15 +44,16 @@ export function useAudioController(
         });
     }
     try {
-      await audioService.play(sound, () => {
+      const played = await audioService.play(sound, () => {
         setState(prev => ({ ...prev, isPlaying: { ...prev.isPlaying, [sound.id]: false } }));
       });
+      if (played === false || revision !== stopRevision.current) return;
       setState(prev => {
         const newUsedSounds = new Set(prev.usedSounds || []);
         newUsedSounds.add(sound.id);
         return {
           ...prev,
-          isPlaying: updatedIsPlaying,
+          isPlaying: { ...prev.isPlaying, ...Object.fromEntries(Object.entries(updatedIsPlaying).filter(([id]) => id === sound.id || (sound.chokeGroup && state.currentScenario.sounds.some(other => other.id === id && other.chokeGroup === sound.chokeGroup)))) },
           usedSounds: newUsedSounds
         };
       });
@@ -62,5 +72,5 @@ export function useAudioController(
     }
   }, [state.isPlaying, handlePlaySound, handleStopSound]);
 
-  return { handleStopSound, handlePlaySound, handleToggleSound };
+  return { handleStopSound, handlePlaySound, handleToggleSound, handleStopAllSounds };
 }

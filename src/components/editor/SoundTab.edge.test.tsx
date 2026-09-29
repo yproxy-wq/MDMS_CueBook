@@ -3,12 +3,13 @@ import React, { act, useEffect, useState } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Scenario, SoundType } from '../../types';
-vi.mock('../../services/AudioService', () => ({audioService:{preload:vi.fn(),getPlaybackStats:vi.fn(),isPlaying:vi.fn(()=>false)}}));
+vi.mock('../../services/AudioService', () => ({audioService:{preload:vi.fn(),stop:vi.fn(),getPlaybackStats:vi.fn(),isPlaying:vi.fn(()=>false)}}));
 vi.mock('motion/react', () => ({AnimatePresence:({children}:{children:React.ReactNode})=>children,motion:{
   div:({children,className}:{children:React.ReactNode;className?:string})=><div className={className}>{children}</div>,
   button:({children,onClick,disabled,...props}:React.ButtonHTMLAttributes<HTMLButtonElement>)=><button onClick={onClick} disabled={disabled} aria-label={props['aria-label']}>{children}</button>,
 }}));
 import { SoundTab } from './SoundTab';
+import { audioService } from '../../services/AudioService';
 let container:HTMLDivElement;
 let root:Root;
 let latest:Scenario;
@@ -19,8 +20,9 @@ const initial = {id:'edge-scenario',sounds:[
 ]} as Scenario;
 function Harness() {
   const [scenario,setScenario]=useState(initial);
+  const [previewId,setPreviewId]=useState<string|null>(null);
   useEffect(() => { latest=scenario; }, [scenario]);
-  return <SoundTab scenario={scenario} onUpdate={setScenario} previewingSoundId={null} onTogglePreview={vi.fn()}/>;
+  return <SoundTab scenario={scenario} onUpdate={setScenario} previewingSoundId={previewId} onTogglePreview={sound=>setPreviewId(sound.id)} onStopPreview={()=>setPreviewId(null)}/>;
 }
 const input=(label:string)=>container.querySelector('[aria-label="'+label+'"]') as HTMLInputElement;
 async function change(element:HTMLInputElement,value:string) {
@@ -40,6 +42,31 @@ beforeEach(async()=>{
 });
 afterEach(async()=>{await act(()=>root.unmount());container.remove();vi.useRealTimers();vi.unstubAllGlobals();});
 describe('sound editing edge cases',()=>{
+  it('stops deleted audio and restores its settings and list position with undo',async()=>{
+    await select('second');
+    await act(()=>(container.querySelector('[aria-label="音源を削除"]') as HTMLButtonElement).click());
+    expect(audioService.stop).toHaveBeenCalledWith('b',true);
+    expect(latest.sounds.map(sound=>sound.id)).toEqual(['a','c']);
+    const undo=Array.from(container.querySelectorAll('button')).find(button=>button.textContent==='元に戻す')!;
+    await act(()=>undo.click());
+    expect(latest.sounds).toEqual(initial.sounds);
+  });
+  it('clears preview selection on delete so undo restores an enabled audition button',async()=>{
+    await select('second');
+    await act(()=>(container.querySelector('[aria-label="音源を試聴"]') as HTMLButtonElement).click());
+    expect((container.querySelector('[aria-label="音源を試聴"]') as HTMLButtonElement).disabled).toBe(true);
+    await act(()=>(container.querySelector('[aria-label="音源を削除"]') as HTMLButtonElement).click());
+    const undo=Array.from(container.querySelectorAll('button')).find(button=>button.textContent==='元に戻す')!;
+    await act(()=>undo.click());
+    expect((container.querySelector('[aria-label="音源を試聴"]') as HTMLButtonElement).disabled).toBe(false);
+  });
+  it('expires the deletion recovery after eight seconds',async()=>{
+    await select('second');
+    await act(()=>(container.querySelector('[aria-label="音源を削除"]') as HTMLButtonElement).click());
+    await act(()=>vi.advanceTimersByTime(8001));
+    expect(container.querySelector('[role="status"]')).toBeNull();
+    expect(latest.sounds.map(sound=>sound.id)).toEqual(['a','c']);
+  });
   it('moves the actual selected search result, including its original upper neighbor',async()=>{
     await change(container.querySelector('[placeholder="音源を検索..."]') as HTMLInputElement,'second');
     const up=container.querySelector('[aria-label="secondを上へ移動"]') as HTMLButtonElement;

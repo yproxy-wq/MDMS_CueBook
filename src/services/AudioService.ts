@@ -3,7 +3,9 @@ import { FadeCurve, SoundConfig, SoundType } from '../types';
 import { networkMonitor } from './NetworkMonitor';
 import { createFadeCurve, normalizeFadeCurve } from '../utils/fadeCurve';
 
-class AudioService {
+export class AudioService {
+  private playbackGeneration = 0;
+  private soundGenerations = new Map<string, number>();
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private bgmGain: GainNode | null = null;
@@ -288,6 +290,7 @@ class AudioService {
   }
 
   stopAll() {
+    this.playbackGeneration += 1;
     this.activeNodes.forEach((node) => {
       if (node.element) node.element.pause();
       if (node.bufferSource) try { node.bufferSource.stop(); } catch (e) { console.warn(e); }
@@ -442,16 +445,23 @@ class AudioService {
     return !!node && !!(node.element && node.element.paused);
   }
 
-  async play(sound: SoundConfig, onEnded?: () => void): Promise<void> {
+  playPreview(sound: SoundConfig, onEnded?: () => void): Promise<boolean> {
+    return this.play(sound, onEnded, true);
+  }
+
+  async play(sound: SoundConfig, onEnded?: () => void, preview = false): Promise<boolean> {
+    const generation = this.playbackGeneration;
+    const soundGeneration = this.soundGenerations.get(sound.id) || 0;
+    const cancelled = () => generation !== this.playbackGeneration || soundGeneration !== (this.soundGenerations.get(sound.id) || 0);
     this.init();
     if (this.ctx!.state === 'suspended') {
       // Keep play() in the user gesture call stack for iOS/iPadOS.
       void this.ctx!.resume().catch((error) => console.warn('[AudioService] Resume failed:', error));
     }
 
-    if (!sound.url) return;
+    if (!sound.url) return false;
 
-    const isSE = sound.type === SoundType.SE && !sound.loopEnabled;
+    const isSE = sound.type === SoundType.SE && !sound.loopEnabled && !preview;
 
     // Toggle logic for BGM / looping sounds
     if (!isSE) {
@@ -462,7 +472,8 @@ class AudioService {
         } else {
           existing.element.pause();
         }
-        return;
+        if (cancelled()) { existing.element.pause(); return false; }
+        return true;
       }
     }
 
@@ -482,6 +493,7 @@ class AudioService {
     if (isSE) {
        try {
          const buffer = await this.fetchAndDecode(sound.url);
+         if (cancelled()) return false;
          if (buffer) {
            const source = this.ctx!.createBufferSource();
            source.buffer = buffer;
@@ -491,7 +503,22 @@ class AudioService {
 
            this.scheduleFadeIn(gain, targetVolume, fadeIn, sound.fadeInCurve);
 
-           source.start(0, sound.startTime || 0);
+           const offset = Math.min(Math.max(0, sound.startTime || 0), buffer.duration);
+           const end = sound.endTime && sound.endTime > 0 ? Math.min(sound.endTime, buffer.duration) : buffer.duration;
+           if (end <= offset) return false;
+           const playbackDuration = end - offset;
+           if (sound.fadeOutEnabled) {
+             const duration = Math.min(playbackDuration, Math.max(0, sound.fadeOutDuration ?? 3));
+             const fadeStart = this.ctx!.currentTime + playbackDuration - duration;
+             this.scheduleFadeIn(gain, targetVolume, Math.min(fadeIn, playbackDuration - duration), sound.fadeInCurve);
+             gain.gain.setValueAtTime(targetVolume, fadeStart);
+             if (duration > 0 && normalizeFadeCurve(sound.fadeOutCurve) !== 'linear') {
+               gain.gain.setValueCurveAtTime(createFadeCurve(sound.fadeOutCurve, targetVolume, 0), fadeStart, duration);
+             } else {
+               gain.gain.linearRampToValueAtTime(0, this.ctx!.currentTime + playbackDuration);
+             }
+           }
+           source.start(0, offset, end - offset);
            this.activeNodes.set(instanceKey, {
              bufferSource: source,
              gain,
@@ -503,7 +530,7 @@ class AudioService {
              this.activeNodes.delete(instanceKey);
              if (onEnded) onEnded();
            };
-           return;
+           return true;
          }
        } catch (err) {
          console.warn(`[AudioService] decodeAudioData failed for SE ${sound.id}, falling back to streaming:`, err);
@@ -511,8 +538,9 @@ class AudioService {
     }
 
     // Default to streaming (BGM) or fallback
+    if (cancelled()) return false;
     const cached = this.getOrBufferSource(sound.url);
-    if (!cached) return;
+    if (!cached) return false;
     const { element, gain } = cached;
     if (!element.paused && !isSE) element.pause();
     
@@ -545,6 +573,8 @@ class AudioService {
         element.currentTime = sound.startTime;
       }
       await element.play();
+      if (cancelled()) { element.pause(); return false; }
+      return true;
     } catch (err) {
       console.warn("Audio play failed:", err);
       this.activeNodes.delete(instanceKey);
@@ -552,7 +582,8 @@ class AudioService {
     }
   }
 
-  stop(id: string) {
+  stop(id: string, immediate = false) {
+    this.soundGenerations.set(id, (this.soundGenerations.get(id) || 0) + 1);
     const keysToStop: string[] = [];
     this.activeNodes.forEach((node, key) => {
       if (key === id || node.config.id === id) {
@@ -567,12 +598,12 @@ class AudioService {
       if (!node) return;
 
       const { element, gain, config, bufferSource } = node;
-      const fadeOut = config.fadeOutEnabled ? (config.fadeOutDuration ?? 3.0) : 0;
+      const fadeOut = !immediate && config.fadeOutEnabled ? (config.fadeOutDuration ?? 3.0) : 0;
       
       try {
         this.scheduleFadeOut(gain, fadeOut, config.fadeOutCurve);
         
-        setTimeout(() => {
+        const finish = () => {
           const currentNode = this.activeNodes.get(key);
           if (currentNode) {
             if (currentNode.element === element && element) element.pause();
@@ -581,7 +612,9 @@ class AudioService {
             }
             this.activeNodes.delete(key);
           }
-        }, (fadeOut + 0.1) * 1000);
+        };
+        if (immediate) finish();
+        else setTimeout(finish, (fadeOut + 0.1) * 1000);
       } catch (err) {
         console.warn(err);
         this.activeNodes.delete(key);

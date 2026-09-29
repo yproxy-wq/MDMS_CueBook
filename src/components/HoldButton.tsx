@@ -24,85 +24,87 @@ export const HoldButton: React.FC<HoldButtonProps> = React.memo(({
   const [progress, setProgress] = useState(0);
   const [isPressing, setIsPressing] = useState(false);
   const timerRef = useRef<number | null>(null);
-  const startTimeRef = useRef<number>(0);
-  const isTouchActiveRef = useRef(false);
+  const pressingRef = useRef(false);
+  const startTimeRef = useRef(0);
+  const completeRef = useRef(onHoldComplete);
+  useEffect(() => { completeRef.current = onHoldComplete; }, [onHoldComplete]);
 
+  const endPress = () => {
+    pressingRef.current = false;
+    setIsPressing(false);
+    setProgress(0);
+    if (timerRef.current !== null) cancelAnimationFrame(timerRef.current);
+    timerRef.current = null;
+  };
   useEffect(() => {
+    const cancel = () => {
+      pressingRef.current = false;
+      if (timerRef.current !== null) cancelAnimationFrame(timerRef.current);
+      timerRef.current = null;
+      setIsPressing(false);
+      setProgress(0);
+    };
+    const visibility = () => { if (document.hidden) cancel(); };
+    window.addEventListener('blur', cancel);
+    document.addEventListener('visibilitychange', visibility);
     return () => {
-      if (timerRef.current) {
-        cancelAnimationFrame(timerRef.current);
-      }
+      window.removeEventListener('blur', cancel);
+      document.removeEventListener('visibilitychange', visibility);
+      pressingRef.current = false;
+      if (timerRef.current !== null) cancelAnimationFrame(timerRef.current);
     };
   }, []);
-
-  const startPress = (e: React.MouseEvent | React.TouchEvent) => {
-    e.stopPropagation();
-
-    const isTouchEvent = 'touches' in e;
-    if (isTouchEvent) {
-      isTouchActiveRef.current = true;
-    } else if (isTouchActiveRef.current) {
-      // Ignore mouse event if a touch event is active (prevents synthetic mouse events on mobile)
-      return;
-    }
-
-    // Cancel any existing animation before starting a new one
-    if (timerRef.current) {
-      cancelAnimationFrame(timerRef.current);
-      timerRef.current = null;
-    }
-
+  const startPress = () => {
+    if (pressingRef.current) return;
+    pressingRef.current = true;
     setIsPressing(true);
     setProgress(0);
     startTimeRef.current = getCurrentTime();
-
     const animate = () => {
+      if (!pressingRef.current) return;
       const elapsed = getCurrentTime() - startTimeRef.current;
-      const currentProgress = Math.min(100, (elapsed / requiredDuration) * 100);
-      setProgress(currentProgress);
-
+      setProgress(Math.min(100, elapsed / requiredDuration * 100));
       if (elapsed >= requiredDuration) {
-        onHoldComplete();
         endPress();
-      } else {
-        timerRef.current = requestAnimationFrame(animate);
-      }
+        completeRef.current();
+      } else timerRef.current = requestAnimationFrame(animate);
     };
-
     timerRef.current = requestAnimationFrame(animate);
-  };
-
-  const endPress = (e?: React.MouseEvent | React.TouchEvent) => {
-    if (e) {
-      e.stopPropagation();
-      const isTouchEvent = 'touches' in e;
-      if (isTouchEvent) {
-        // Keep active brief to suppress synthetic clicks/mousedowns on mobile
-        setTimeout(() => {
-          isTouchActiveRef.current = false;
-        }, 300);
-      }
-    }
-
-    setIsPressing(false);
-    setProgress(0);
-    if (timerRef.current) {
-      cancelAnimationFrame(timerRef.current);
-      timerRef.current = null;
-    }
   };
 
   return (
     <button
       id={id}
-      onMouseDown={startPress}
-      onMouseUp={endPress}
-      onMouseLeave={endPress}
-      onTouchStart={startPress}
-      onTouchEnd={endPress}
+      type="button"
+      aria-label={title}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        event.preventDefault(); event.stopPropagation();
+        event.currentTarget.focus();
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+        startPress();
+      }}
+      onPointerUp={endPress}
+      onPointerCancel={endPress}
+      onLostPointerCapture={endPress}
+      onPointerLeave={endPress}
+      onBlur={endPress}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') { event.stopPropagation(); endPress(); }
+        if (event.key === ' ' || event.key === 'Enter') {
+          event.preventDefault(); event.stopPropagation();
+          if (!event.repeat) startPress();
+        }
+      }}
+      onKeyUp={(event) => {
+        if (event.key === ' ' || event.key === 'Enter') {
+          event.preventDefault(); event.stopPropagation(); endPress();
+        }
+      }}
+      onClick={(event) => { event.preventDefault(); event.stopPropagation(); }}
       title={title}
       style={style}
-      className={`relative overflow-hidden transition-all select-none ${className}`}
+      className={`relative min-h-[44px] min-w-[44px] touch-none overflow-hidden transition-all select-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-white ${className}`}
     >
       {/* Background fill based on progress */}
       {isPressing && (

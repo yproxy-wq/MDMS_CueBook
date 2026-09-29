@@ -41,6 +41,13 @@
   .sync-quick-controls__actions button { padding-inline: 8px; }
 }
 
+@container (max-width: 600px) {
+  .performance-control-bar__content { flex-wrap: wrap; }
+  .performance-control-bar__primary { width: 100%; flex-wrap: wrap; }
+  .performance-control-bar__primary > div:last-child { flex: 1 1 160px; }
+  .performance-control-bar__sync { margin-left: auto; }
+}
+
 @media (min-width: 768px) and (max-height: 700px) {
   .tablet-reading-phase-nav { height: 56px; min-height: 56px; }
   .tablet-reading-phase-nav .phase-tab { min-height: 44px; }
@@ -86,3 +93,12 @@
 .tablet-reading-toolbar__details {
   border-top: 1px solid rgb(255 255 255 / 0.1);
 }
+
+@media (max-width: 767px) {
+  .tablet-reading-toolbar--compact .tablet-reading-toolbar > header {
+    height: auto;
+    min-height: 48px;
+  }
+}
+
+.performance-control-bar button { min-height: 44px; min-width: 44px; }

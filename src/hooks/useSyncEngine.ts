@@ -7,6 +7,7 @@ import { useTimerSync } from './useTimerSync';
 import { fingerprintScenario, legacyScenarioKey } from '../services/ScenarioRegistryService';
 import { createAsyncRequestGuard } from '../utils/asyncRequestGuard';
 import { errorLogger } from '../services/ErrorLogger';
+import { restoreScenarioSession } from '../utils/scenarioSession';
 
 interface UseSyncEngineProps {
   user: User | null;
@@ -30,16 +31,6 @@ export function useSyncEngine({
   scenarioId
 }: UseSyncEngineProps) {
 
-  const createInitialTimers = (scenario: AppState['currentScenario']): AppState['timerStates'] => {
-    const initialTimers: AppState['timerStates'] = {};
-    (scenario.phases || []).forEach((p: Phase) => {
-      (p.timers || []).forEach(t => {
-        initialTimers[t.id] = { seconds: t.durationMinutes * 60, isRunning: false, startTime: null };
-      });
-    });
-    return initialTimers;
-  };
-
   // 1. Load initial scenario from IndexedDB on mount
   useEffect(() => {
     const requestGuard = createAsyncRequestGuard();
@@ -53,25 +44,13 @@ export function useSyncEngine({
         if (!requestGuard.isActive()) return;
         const scenarioToLoad = storageService.migrateScenarioData(saved || INITIAL_SCENARIO);
 
-        const initialTimers = createInitialTimers(scenarioToLoad);
         const savedSession = await storageService.loadSession(scenarioToLoad.id);
         if (!requestGuard.isActive()) return;
         
         setState(prev => ({
           ...prev,
           currentScenario: scenarioToLoad,
-          currentPhaseId: savedSession?.currentPhaseId || scenarioToLoad.phases[0]?.id || '',
-          previewPhaseId: savedSession?.previewPhaseId || scenarioToLoad.phases[0]?.id || '',
-          timerStates: savedSession?.timerStates || initialTimers,
-          phaseResults: savedSession?.phaseResults || {},
-          phaseDurations: savedSession?.phaseDurations || {},
-          activeImageId: savedSession?.activeImageId ?? null,
-          gmActiveImageId: savedSession?.gmActiveImageId ?? null,
-          sessionStartTime: savedSession?.sessionStartTime,
-          phaseStartTime: savedSession?.phaseStartTime,
-          exitTime: savedSession?.exitTime || prev.exitTime,
-          isPaused: savedSession?.isPaused ?? false,
-          syncConfig: savedSession?.syncConfig || scenarioToLoad.syncConfig || prev.syncConfig
+          ...restoreScenarioSession(scenarioToLoad, savedSession, prev.syncConfig)
         }));
       } catch (e) {
         if (requestGuard.isActive()) {

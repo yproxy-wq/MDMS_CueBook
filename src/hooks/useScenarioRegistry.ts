@@ -26,6 +26,7 @@ export function useScenarioRegistry({ isReady, user, currentScenarioRef, setStat
 
   const refreshScenarioRegistry = useCallback(async () => {
     if (!isReady) return;
+    const scenarioAtRequest = currentScenarioRef.current;
     try {
       const keys = await storageService.listScenarioKeys();
       for (const demoScenario of [DEMO_SCENARIO, DEMO_DARUMA_SCENARIO]) {
@@ -89,8 +90,8 @@ export function useScenarioRegistry({ isReady, user, currentScenarioRef, setStat
         });
       }
       const currentCloud = cloudEntries.find(item => item.scenarioId === currentScenarioRef.current.id);
-      if (currentCloud?.settings) {
-        setState(previous => ({
+      if (currentCloud?.settings && currentCloud.scenarioId === scenarioAtRequest.id) {
+        setState(previous => previous.currentScenario !== scenarioAtRequest ? previous : ({
           ...previous,
           currentScenario: applyScenarioSettings(previous.currentScenario, currentCloud.settings),
           syncConfig: currentCloud.settings?.syncConfig || previous.syncConfig,

@@ -1,3 +1,4 @@
+import { useScenarioChannel, type ScenarioChannelMessage } from './hooks/useScenarioChannel';
 import { TimerTapControl } from './components/TimerTapControl';
 import { RecommendedBgmDock } from './components/RecommendedBgmDock';
 import { SyncQuickControls } from './components/SyncQuickControls';
@@ -68,7 +69,7 @@ import { useAppWindowRouting } from './hooks/useAppWindowRouting';
 import { useAppModalState } from './hooks/useAppModalState';
 import { useAppAuthentication } from './hooks/useAppAuthentication';
 import { useScenarioRegistry } from './hooks/useScenarioRegistry';
-import { createScenarioSessionSnapshot, createTimerStatesForScenario } from './utils/scenarioSession';
+import { createScenarioSessionSnapshot, restoreScenarioSession } from './utils/scenarioSession';
 import { createResetScenarioWithSnapshot } from './utils/scenarioReset';
 
 const EditorView = React.lazy(() => import('./components/EditorView'));
@@ -130,7 +131,6 @@ function App() {
     handoutCharacterId, setHandoutCharacterId,
     performanceHistory, setPerformanceHistory,
     showSyncModal, setShowSyncModal,
-    isTimerDropdownOpen, setIsTimerDropdownOpen,
     isPhaseSearchOpen, setIsPhaseSearchOpen,
     isPhasePopupOpen, setIsPhasePopupOpen,
     isSoundPopupOpen, setIsSoundPopupOpen,
@@ -290,8 +290,6 @@ function App() {
   const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
   const [lastError, setLastError] = useState<{code: string; message: string} | null>(null);
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(() => checkQuotaInitial());
-  const timerDropdownRef1 = useRef<HTMLDivElement>(null);
-  const timerDropdownRef2 = useRef<HTMLDivElement>(null);
   const [scenarioSwitching, setScenarioSwitching] = useState(false);
   const [pendingScenarioSwitch, setPendingScenarioSwitch] = useState<ScenarioRegistryEntry | null>(null);
   const initialScenarioResolutionRef = useRef(false);
@@ -346,11 +344,10 @@ function App() {
   // Native scrolling avoids double movement from touch and scripted scrolling.
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const showTopVolume = useMemo(() => 
-    (state.currentScenario.masterVolumePosition === 'top' || !state.currentScenario.masterVolumePosition) && 
-    layoutMode !== '1-column' && 
-    !isTabletVertical
-  , [state.currentScenario.masterVolumePosition, layoutMode, isTabletVertical]);
+  const showTopVolume = useMemo(() =>
+    state.isEditorMode || layoutMode === '1-column' || isTabletVertical ||
+    state.currentScenario.masterVolumePosition === 'top' || !state.currentScenario.masterVolumePosition
+  , [state.isEditorMode, state.currentScenario.masterVolumePosition, layoutMode, isTabletVertical]);
 
 
   // Local videos hook
@@ -478,7 +475,7 @@ function App() {
     }
   }, [state.currentScenario.title, state.currentScenario.audioPreferences]);
 
-  const { handleStopSound, handlePlaySound, handleToggleSound } = useAudioController(state, setState, activateAudioWithPrefs);
+  const { handleStopSound, handleStopAllSounds, handlePlaySound, handleToggleSound } = useAudioController(state, setState, activateAudioWithPrefs);
 
   const viewedPhase = useMemo(() =>
     selectViewedPhase(state.currentScenario, state.previewPhaseId),
@@ -836,7 +833,7 @@ function App() {
     onResetTimer: () => onResetTimer(),
     onToggleSound: handleToggleSound,
     onPlaySound: handlePlaySound,
-    onStopAllSounds: () => handleStopSound('all'),
+    onStopAllSounds: handleStopAllSounds,
     onControlVideo: handleControlVideo,
     onToggleSyncWindow: () => setShowSyncModal(prev => !prev),
     onNextPhase: handleNextPhase,
@@ -1353,21 +1350,12 @@ function App() {
     const currentSession = createScenarioSessionSnapshot(current);
     await storageService.saveSession(current.currentScenario.id, currentSession);
     await storageService.saveScenario(scenario.id, scenario);
-    const nextPhaseId = scenario.phases?.[0]?.id || '';
+    const savedSession = await storageService.loadSession(scenario.id);
     setState(previous => ({
       ...previous,
       currentScenario: scenario,
-      currentPhaseId: nextPhaseId,
-      previewPhaseId: nextPhaseId,
-      timerStates: createTimerStatesForScenario(scenario),
-      phaseResults: {},
-      phaseDurations: {},
+      ...restoreScenarioSession(scenario, savedSession, previous.syncConfig),
       isPlaying: {},
-      activeImageId: null,
-      gmActiveImageId: null,
-      syncConfig: scenario.syncConfig || previous.syncConfig,
-      phaseStartTime: undefined,
-      sessionStartTime: undefined,
     }));
     setActiveTimerIndex(0);
     const params = new URLSearchParams(window.location.search);
@@ -1515,42 +1503,28 @@ function App() {
     await performScenarioSelect(entry);
   }, [pendingScenarioSwitch, performScenarioSelect]);
 
-  useEffect(() => {
-    if (!isReady) return;
-    const scope = user?.uid || 'anonymous';
-    const channelName = `cuebook-active-scenario:${scope}`;
-    const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(channelName) : null;
-    scenarioChannelRef.current = channel;
-    const applyRemoteScenario = (scenarioId: string) => {
-      if (!scenarioId || scenarioId === state.currentScenario.id) return;
-      pendingRemoteScenarioIdRef.current = scenarioId;
-      const entry = scenarioEntries.find(item => item.scenarioId === scenarioId);
-      if (!entry || scenarioSwitching) return;
-      pendingRemoteScenarioIdRef.current = null;
-      remoteScenarioSwitchRef.current = true;
-      void performScenarioSelect(entry).finally(() => { remoteScenarioSwitchRef.current = false; });
-    };
-    const handleMessage = (event: MessageEvent<{ type?: string; scenarioId?: string; source?: string }>) => {
-      const message = event.data;
-      if (!message || message.source === scenarioTabIdRef.current) return;
-      if (message.type === 'scenario-active' && message.scenarioId) applyRemoteScenario(message.scenarioId);
-      if (message.type === 'scenario-active-request') broadcastActiveScenario(state.currentScenario.id);
-    };
-    channel?.addEventListener('message', handleMessage);
-    const storageKey = `cuebook_active_scenario:${scope}`;
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key !== storageKey || !event.newValue) return;
-      try { handleMessage({ data: JSON.parse(event.newValue) } as MessageEvent<{ type?: string; scenarioId?: string; source?: string }>); } catch { /* ignore malformed stale values */ }
-    };
-    window.addEventListener('storage', handleStorage);
-    channel?.postMessage({ type: 'scenario-active-request', source: scenarioTabIdRef.current });
-    return () => {
-      channel?.removeEventListener('message', handleMessage);
-      channel?.close();
-      if (scenarioChannelRef.current === channel) scenarioChannelRef.current = null;
-      window.removeEventListener('storage', handleStorage);
-    };
-  }, [broadcastActiveScenario, isReady, performScenarioSelect, scenarioEntries, scenarioSwitching, state.currentScenario.id, user?.uid]);
+  const handleScenarioChannelMessage = useCallback((message: ScenarioChannelMessage) => {
+    if (message.type === 'scenario-active-request') {
+      broadcastActiveScenario(state.currentScenario.id);
+      return;
+    }
+    const scenarioId = message.scenarioId;
+    if (message.type !== 'scenario-active' || !scenarioId || scenarioId === state.currentScenario.id) return;
+    pendingRemoteScenarioIdRef.current = scenarioId;
+    const entry = scenarioEntries.find(item => item.scenarioId === scenarioId);
+    if (!entry || scenarioSwitching || remoteScenarioSwitchRef.current) return;
+    pendingRemoteScenarioIdRef.current = null;
+    remoteScenarioSwitchRef.current = true;
+    void performScenarioSelect(entry).finally(() => { remoteScenarioSwitchRef.current = false; });
+  }, [broadcastActiveScenario, performScenarioSelect, scenarioEntries, scenarioSwitching, state.currentScenario.id]);
+
+  useScenarioChannel({
+    enabled: isReady,
+    scope: user?.uid || 'anonymous',
+    source: scenarioTabIdRef.current,
+    channelRef: scenarioChannelRef,
+    onMessage: handleScenarioChannelMessage,
+  });
 
   useEffect(() => {
     const handleScenarioHistory = () => {
@@ -1752,32 +1726,6 @@ function App() {
     setBackupData(null);
   }, [setShowRecoveryModal, setBackupData]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setIsTimerDropdownOpen(false);
-      }
-    };
-    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
-      if (!isTimerDropdownOpen) return;
-      const target = e.target as Node;
-      const inRef1 = timerDropdownRef1.current?.contains(target);
-      const inRef2 = timerDropdownRef2.current?.contains(target);
-      if (!inRef1 && !inRef2) {
-        setIsTimerDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('touchstart', handleClickOutside);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
-    };
-  }, [isTimerDropdownOpen, setIsTimerDropdownOpen]);
-
   const queryParams = new URLSearchParams(window.location.search);
   const view = queryParams.get('view');
   const sessionId = queryParams.get('sessionId');
@@ -1841,35 +1789,6 @@ function App() {
 
   // Unused popup timer legacy logic cleaned for integrated docking.
 
-  const renderTimerDropdown = () => (
-    <AnimatePresence>
-      {isTimerDropdownOpen && (
-        <motion.div 
-          initial={{ opacity: 0, y: layoutMode === '1-column' ? 10 : -10, x: "-50%", scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, x: "-50%", scale: 1 }}
-          exit={{ opacity: 0, y: layoutMode === '1-column' ? 10 : -10, x: "-50%", scale: 0.95 }}
-          className={`absolute ${layoutMode === '1-column' ? 'bottom-full mb-2' : 'top-full mt-2'} left-1/2 w-48 bg-[#0c0c0d]/98 border rounded-xl shadow-[0_25px_70px_rgba(0,0,0,0.9)] z-[9999] backdrop-blur-3xl p-1.5 cursor-default`}
-          style={{ borderColor: themeColor + '1a', boxShadow: `0 25px 70px rgba(0,0,0,0.9), 0 0 20px ${themeColor}10` }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <motion.button 
-            whileHover={{ scale: 1.02, backgroundColor: themeColor + '3d', borderColor: themeColor + '80' }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => {
-              setIsTimerDropdownOpen(false);
-              setShowSyncModal(true);
-            }}
-            style={{ backgroundColor: themeColor + '26', borderColor: themeColor + '4d', color: themeColor }}
-            className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg border transition-all text-center cursor-pointer font-bold shadow-inner"
-          >
-            <Settings size={15} />
-            <span className="text-[11px] font-bold font-cinzel tracking-widest uppercase">子ウィンドウ設定</span>
-          </motion.button>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-
   const liveControlBar = !state.isEditorMode ? (
     <RecommendedBgmDock
       phase={viewedPhase}
@@ -1905,7 +1824,6 @@ function App() {
       <div className="performance-control-bar__content flex min-h-11 items-center justify-between gap-3">
         <div className="performance-control-bar__primary flex min-w-0 items-center gap-3">
           <div
-            ref={timerDropdownRef1}
             className={`performance-control-bar__timer relative flex items-center justify-center rounded-lg border bg-zinc-950/80 px-4 py-2 shadow-xl transition-all hover:border-white/20 shrink-0 select-none
               ${activeTimerState?.isRunning ? 'border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.12)]' : 'border-white/10'}`}
             style={{ borderWidth: '0px' }}
@@ -1913,12 +1831,11 @@ function App() {
             <TimerTapControl key={state.currentScenario.id + ':' + activeTimer?.id} isRunning={Boolean(activeTimerState?.isRunning)} disabled={!activeTimer} onToggle={() => onToggleTimer()}>
               <CompactTimerReadout timerState={activeTimerState} className="font-mono leading-none font-black tabular-nums tracking-wide transition-all duration-300" fontSize="clamp(30px, 4.8vw, 38px)" />
             </TimerTapControl>
-            <button type="button" aria-label="タイマー設定を開く" aria-expanded={isTimerDropdownOpen}
-              onClick={() => setIsTimerDropdownOpen(!isTimerDropdownOpen)}
+            <button type="button" aria-label="タイマー・子画面設定を開く" aria-haspopup="dialog"
+              onClick={() => setShowSyncModal(true)}
               className="flex h-[44px] w-[44px] shrink-0 touch-manipulation items-center justify-center rounded-lg text-white/50 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
               <Settings size={16} aria-hidden="true" />
             </button>
-            {renderTimerDropdown()}
           </div>
           <div className="flex min-w-0 items-center gap-3">
             {topbarBgmControl}
@@ -1936,7 +1853,7 @@ function App() {
                 color: '#ffffff'
               } : undefined}
               title="音響パネル"
-              aria-label="音響パネルを開く"
+              aria-label="音響パネルを開く" aria-expanded={isSoundPopupOpen}
             >
               <SlidersHorizontal size={17} />
             </button>
@@ -2386,20 +2303,18 @@ function App() {
 
                   {/* Center Area: Elegant Draggable Cockpit Clock & Timer (Timer Digits Only) */}
                   <div 
-                    ref={timerDropdownRef2}
                     className={`relative flex items-center justify-center bg-zinc-950/80 border rounded-full px-5 py-2 hover:border-white/20 select-none shadow-xl transition-all shrink-0
                       ${activeTimerState?.isRunning ? 'border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.12)]' : 'border-white/10'}`}
                   >
                       <TimerTapControl key={state.currentScenario.id + ':' + activeTimer?.id} isRunning={Boolean(activeTimerState?.isRunning)} disabled={!activeTimer} onToggle={() => onToggleTimer()}>
                         <CompactTimerReadout timerState={activeTimerState} className="text-[17px] md:text-[18px] font-mono leading-none font-black tabular-nums tracking-wide transition-all duration-300" />
                       </TimerTapControl>
-                      <button type="button" aria-label="タイマー設定を開く" aria-expanded={isTimerDropdownOpen}
-                        onClick={() => setIsTimerDropdownOpen(!isTimerDropdownOpen)}
+                      <button type="button" aria-label="タイマー・子画面設定を開く" aria-haspopup="dialog"
+                        onClick={() => setShowSyncModal(true)}
                         className="flex h-[44px] w-[44px] shrink-0 touch-manipulation items-center justify-center rounded-lg text-white/50 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
                         <Settings size={16} aria-hidden="true" />
                       </button>
-                      {renderTimerDropdown()}
-                  </div>
+                            </div>
 
                   {/* Right Area: Dynamic Audio Monitor Token Mixer Toggle */}
                   <div className="flex items-center gap-3">
@@ -2419,13 +2334,9 @@ function App() {
                         boxShadow: `0 0 15px ${themeColor}77`,
                         color: '#ffffff'
                       } : undefined}
-                      title="Audio Control Console"
+                      title="音響パネル" aria-label="音響パネルを開く" aria-expanded={isSoundPopupOpen}
                     >
-                      {Object.values(state.isPlaying || {}).some(Boolean) ? (
-                        <Pause size={18} fill="currentColor" />
-                      ) : (
-                        <Play size={18} fill="currentColor" className="ml-0.5" />
-                      )}
+                      <SlidersHorizontal size={18} aria-hidden="true" />
                     </button>
                   </div>
                 </div>
@@ -2444,7 +2355,7 @@ function App() {
 
               {/* 3. CYBER PHASE CONTROLLER MODAL DIALOG (Left hanging popup) */}
               {isPhasePopupOpen && (
-                <div className={`absolute left-4 z-[450] w-96 max-h-[82vh] bg-black/95 backdrop-blur-xl border rounded-2xl p-4 shadow-2xl flex flex-col overflow-hidden animate-in fade-in duration-200 ${
+                <div className={`absolute left-4 z-[450] w-96 max-w-[calc(100%-2rem)] max-h-[82vh] bg-black/95 backdrop-blur-xl border rounded-2xl p-4 shadow-2xl flex flex-col overflow-hidden animate-in fade-in duration-200 ${
                   layoutMode === '1-column' 
                     ? 'bottom-[76px] slide-in-from-bottom-3' 
                     : 'top-[76px] slide-in-from-top-3'
@@ -2488,7 +2399,7 @@ function App() {
 
               {/* 4. DUAL-STYLE SOUND BOARD & SAMPLER MODAL DIALOG (Right hanging grand gold popup) */}
               {isSoundPopupOpen && (
-                <div className={`absolute right-4 z-[450] w-[380px] max-h-[82vh] bg-[#0c0c0e]/98 backdrop-blur-3xl border-2 rounded-2xl p-4 shadow-3xl flex flex-col overflow-hidden animate-in fade-in duration-200 ${
+                <div className={`absolute right-4 z-[450] w-[380px] max-w-[calc(100%-2rem)] max-h-[82vh] bg-[#0c0c0e]/98 backdrop-blur-3xl border-2 rounded-2xl p-4 shadow-3xl flex flex-col overflow-hidden animate-in fade-in duration-200 ${
                   layoutMode === '1-column' 
                     ? 'bottom-[76px] slide-in-from-bottom-3' 
                     : 'top-[76px] slide-in-from-top-3'
@@ -2516,7 +2427,7 @@ function App() {
                       <input 
                         type="range" min="0" max="1" step="0.01" value={state.volume || 0}
                         onChange={(e) => setState(s => ({ ...s, volume: parseFloat(e.target.value) }))}
-                        className="flex-1 h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-cyan-400 hover:accent-cyan-300 transition-all"
+                        className="flex-1 h-11 bg-white/10 rounded-full appearance-none cursor-pointer accent-cyan-400 hover:accent-cyan-300 transition-all"
                       />
                     </div>
 
@@ -2571,19 +2482,16 @@ function App() {
                             {/* IN, OUT, LOOP indicators */}
                             <div className="flex gap-1 shrink-0 z-10">
                               {[
-                                { label: 'IN', field: 'fadeInEnabled' as const, color: 'text-sky-400' },
-                                { label: 'OUT', field: 'fadeOutEnabled' as const, color: 'text-amber-400' },
-                                { label: 'LOOP', field: 'loopEnabled' as const, color: 'text-emerald-400' }
+                                { label: 'フェードイン', field: 'fadeInEnabled' as const, color: 'text-sky-400' },
+                                { label: 'フェードアウト', field: 'fadeOutEnabled' as const, color: 'text-amber-400' },
+                                { label: 'ループ', field: 'loopEnabled' as const, color: 'text-emerald-400' }
                               ].map(indicator => {
                                 const isEnabled = !!sound[indicator.field];
                                 return (
                                   <span 
                                     key={indicator.label}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleUpdateSoundConfig(sound.id, { [indicator.field]: !isEnabled });
-                                    }}
-                                    className={`text-[8px] font-black px-1.5 py-0.5 rounded border transition-all cursor-pointer select-none
+                                    title={`${indicator.label}: ${isEnabled ? '有効' : '無効'}（変更は音源編集から）`}
+                                    className={`text-[8px] font-black px-1.5 py-0.5 rounded border transition-all select-none
                                       ${isEnabled 
                                         ? `border-white/20 ${indicator.color} bg-white/10 shadow-[0_0_6px_rgba(255,255,255,0.05)]` 
                                         : 'border-white/[0.05] text-white/20 bg-transparent opacity-40 hover:opacity-100 hover:text-white'
@@ -2599,9 +2507,9 @@ function App() {
                             <div className="flex-1 flex items-center gap-1.5 min-w-0">
                               <Volume2 size={11} className="text-white/40 shrink-0" />
                               <input 
-                                type="range" min="0" max="1" step="0.01" value={sound.volume ?? 0.8}
+                                type="range" min="0" max="1" step="0.01" value={sound.volume ?? 0.8} aria-label={`${sound.name}の音量`}
                                 onChange={(e) => handleUpdateSoundConfig(sound.id, { volume: parseFloat(e.target.value) })}
-                                className="flex-1 h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-cyan-400 hover:accent-cyan-300 transition-all min-w-0"
+                                className="flex-1 h-11 bg-white/10 rounded-full appearance-none cursor-pointer accent-cyan-400 hover:accent-cyan-300 transition-all min-w-0"
                               />
                             </div>
                           </div>
@@ -3222,7 +3130,7 @@ function App() {
       <QuickActionsModal
         isOpen={isQuickActionsOpen}
         onClose={() => setIsQuickActionsOpen(false)}
-        onStopAllAudio={() => handleStopSound('all')}
+        onStopAllAudio={handleStopAllSounds}
         onResetTimer={() => onResetTimer()}
         onToggleEditorMode={toggleEditorMode}
         onOpenPhaseSearch={() => setIsPhaseSearchOpen(true)}

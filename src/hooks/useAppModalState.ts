@@ -16,7 +16,6 @@ export function useAppModalState() {
   const [handoutCharacterId, setHandoutCharacterId] = useState<string | null>(null);
   const [performanceHistory, setPerformanceHistory] = useState<Performance[]>([]);
   const [showSyncModal, setShowSyncModal] = useState(false);
-  const [isTimerDropdownOpen, setIsTimerDropdownOpen] = useState(false);
   const [isPhaseSearchOpen, setIsPhaseSearchOpen] = useState(false);
   const [isPhasePopupOpen, setIsPhasePopupOpen] = useState(false);
   const [isSoundPopupOpen, setIsSoundPopupOpen] = useState(false);
@@ -35,7 +34,6 @@ export function useAppModalState() {
     handoutCharacterId, setHandoutCharacterId,
     performanceHistory, setPerformanceHistory,
     showSyncModal, setShowSyncModal,
-    isTimerDropdownOpen, setIsTimerDropdownOpen,
     isPhaseSearchOpen, setIsPhaseSearchOpen,
     isPhasePopupOpen, setIsPhasePopupOpen,
     isSoundPopupOpen, setIsSoundPopupOpen,

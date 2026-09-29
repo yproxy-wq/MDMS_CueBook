@@ -11,14 +11,21 @@ interface SoundTabProps {
   onUpdate: (updated: Scenario) => void;
   previewingSoundId: string | null;
   onTogglePreview: (sound: SoundConfig) => void;
+  onStopPreview?: (soundId: string) => void;
 }
 
-export const SoundTab: React.FC<SoundTabProps> = React.memo(({ 
-  scenario, onUpdate, previewingSoundId, onTogglePreview 
+export const SoundTab: React.FC<SoundTabProps> = React.memo(({
+  scenario, onUpdate, previewingSoundId, onTogglePreview, onStopPreview
 }) => {
   const [selectedSoundId, setSelectedSoundId] = useState<string | null>(null);
   const [isChangingSound, setIsChangingSound] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [deletedSound, setDeletedSound] = useState<{scenarioId:string; sound:SoundConfig; index:number} | null>(null);
+  useEffect(() => {
+    if (!deletedSound) return;
+    const timer = window.setTimeout(() => setDeletedSound(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [deletedSound]);
 
   const handleSelectSound = useCallback((id: string) => {
     if (id === selectedSoundId) return;
@@ -35,13 +42,13 @@ export const SoundTab: React.FC<SoundTabProps> = React.memo(({
     const urls = sounds.map(s => s.url).filter(Boolean);
     audioService.preload(urls.slice(0, 5)); // Preload first 5 for quick start
   }, [sounds]);
-  
+
   const filteredSounds = useMemo(() => {
     if (!searchQuery) return sounds;
     return sounds.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()));
   }, [sounds, searchQuery]);
 
-  const selectedSound = useMemo(() => 
+  const selectedSound = useMemo(() =>
     sounds.find(s => s.id === selectedSoundId) || null
   , [sounds, selectedSoundId]);
 
@@ -73,6 +80,11 @@ export const SoundTab: React.FC<SoundTabProps> = React.memo(({
   };
 
   const removeSound = (id: string) => {
+    const index = sounds.findIndex(sound => sound.id === id);
+    if (index < 0) return;
+    audioService.stop(id, true);
+    onStopPreview?.(id);
+    setDeletedSound({scenarioId:scenario.id, sound:sounds[index], index});
     onUpdate({
       ...scenario,
       sounds: sounds.filter(s => s.id !== id)
@@ -90,6 +102,18 @@ export const SoundTab: React.FC<SoundTabProps> = React.memo(({
 
   return (
     <div className="flex flex-col h-full gap-4 animate-in fade-in duration-300">
+      {deletedSound?.scenarioId === scenario.id && <div role="status" className="flex min-h-[44px] items-center justify-between gap-3 rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 text-sm text-white/80">
+        <span>「{deletedSound.sound.name}」を削除しました</span>
+        <button type="button" className="min-h-[44px] shrink-0 px-3 text-amber-300" onClick={() => {
+          if (!sounds.some(sound => sound.id === deletedSound.sound.id)) {
+            const restored = [...sounds];
+            restored.splice(Math.min(deletedSound.index, restored.length), 0, deletedSound.sound);
+            onUpdate({...scenario, sounds:restored});
+            setSelectedSoundId(deletedSound.sound.id);
+          }
+          setDeletedSound(null);
+        }}>元に戻す</button>
+      </div>}
       {/* Top Section: List */}
       <div className="flex flex-col gap-3 shrink-0">
         <div className="flex flex-wrap items-center justify-between gap-3 px-1">
@@ -99,7 +123,7 @@ export const SoundTab: React.FC<SoundTabProps> = React.memo(({
             </h3>
             <div className="relative w-full min-w-0 sm:w-64">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" />
-              <input 
+              <input
                 value={searchQuery || ''}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="音源を検索..."
@@ -107,7 +131,7 @@ export const SoundTab: React.FC<SoundTabProps> = React.memo(({
               />
             </div>
           </div>
-          <button 
+          <button
             onClick={addSound}
             className="flex items-center gap-2 min-h-[44px] shrink-0 px-3 bg-white/5 border border-white/10 rounded-lg text-sm font-medium text-white/70 hover:text-white hover:bg-white/10 transition-all"
           >
@@ -118,7 +142,7 @@ export const SoundTab: React.FC<SoundTabProps> = React.memo(({
         <div className="flex overflow-x-auto gap-3 pb-3 scrollbar-thin scrollbar-thumb-white/10">
           {filteredSounds.map((sound) => (
             <div key={sound.id} className="w-56 shrink-0">
-              <SoundListItem 
+              <SoundListItem
                 sound={sound}
                 isSelected={selectedSoundId === sound.id}
                 onClick={() => handleSelectSound(sound.id)}
