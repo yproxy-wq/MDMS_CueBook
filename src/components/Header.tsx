@@ -63,7 +63,7 @@ interface HeaderProps {
   phaseStartTime?: number;
   customShortcuts?: CustomShortcuts;
   scenarioEntries?: ScenarioRegistryEntry[];
-  onScenarioSelect?: (entry: ScenarioRegistryEntry) => void;
+  onScenarioSelect?: (entry: ScenarioRegistryEntry) => Promise<boolean | 'confirmation'>;
   onRegisterLocalScenarios?: () => void;
   scenarioSwitching?: boolean;
   currentScenarioId?: string;
@@ -963,7 +963,12 @@ const Header: React.FC<HeaderProps> = React.memo(({
         currentScenarioId={currentScenarioId || ''}
         isEditorMode={isEditorMode}
         switching={scenarioSwitching}
-        onSelect={(entry) => { onScenarioSelect?.(entry); setShowScenarioManagerModal(false); }}
+        onSelect={async (entry) => {
+          if (!onScenarioSelect) return false;
+          const switched = await onScenarioSelect(entry);
+          if (switched) setShowScenarioManagerModal(false);
+          return switched;
+        }}
         onRegister={onRegisterLocalScenarios}
         onToggleEditor={onToggleEditor}
         onImport={onImport}

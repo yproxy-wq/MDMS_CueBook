@@ -13,7 +13,7 @@ interface ScenarioManagerModalProps {
   currentScenarioId: string;
   isEditorMode: boolean;
   switching: boolean;
-  onSelect: (entry: ScenarioRegistryEntry) => void;
+  onSelect: (entry: ScenarioRegistryEntry) => Promise<boolean | 'confirmation'>;
   onRegister?: () => void;
   onToggleEditor: () => void;
   onImport: () => void;
@@ -46,6 +46,22 @@ const ScenarioManagerModal: React.FC<ScenarioManagerModalProps> = ({
   onResetSession,
 }) => {
   const [copiedScenarioId, setCopiedScenarioId] = React.useState<string | null>(null);
+
+  const [selection, setSelection] = React.useState<{id: string; title: string; status: 'loading' | 'waiting' | 'failed'} | null>(null);
+  const selecting = React.useRef(false);
+  const selectScenario = async (entry: ScenarioRegistryEntry) => {
+    if (selecting.current || switching || entry.scenarioId === currentScenarioId) return;
+    selecting.current = true;
+    setSelection({id: entry.scenarioId, title: entry.title, status: 'loading'});
+    try {
+      const switched = await onSelect(entry);
+      setSelection(switched ? null : {id: entry.scenarioId, title: entry.title, status: 'waiting'});
+    } catch {
+      setSelection({id: entry.scenarioId, title: entry.title, status: 'failed'});
+    } finally {
+      selecting.current = false;
+    }
+  };
 
   const scenarioUrl = (scenarioId: string) => {
     if (typeof window === 'undefined') return `?scenarioId=${encodeURIComponent(scenarioId)}`;
@@ -114,6 +130,9 @@ const ScenarioManagerModal: React.FC<ScenarioManagerModalProps> = ({
                 <Info size={14} className="mt-0.5 shrink-0 text-sky-300" />
                 <span><strong className="font-semibold text-sky-200">並列進行</strong>：シナリオを切り替えても、各シナリオの進行・タイマーは個別に保存され、互いに影響しません。</span>
               </div>
+              {selection && selection.id !== currentScenarioId && <div role={selection.status === 'failed' ? 'alert' : 'status'} className="mb-3 rounded-lg border border-sky-400/30 px-3 py-3 text-xs text-sky-100">
+                {selection.status === 'loading' ? `「${selection.title}」に切り替え中…` : selection.status === 'failed' ? '切り替えに失敗しました。現在のシナリオは保持されています。もう一度選択できます。' : 'まだ切り替わっていません。確認画面・ファイル選択・エラーの案内を確認してください。'}
+              </div>}
               <div className="space-y-2">
                 {entries.length === 0 && <div className="rounded-xl border border-dashed border-white/10 p-7 text-center text-xs text-white/35">登録済みシナリオはありません。</div>}
                 {entries.slice(0, MAX_SCENARIO_ENTRIES).map((entry, index) => {
@@ -122,7 +141,7 @@ const ScenarioManagerModal: React.FC<ScenarioManagerModalProps> = ({
                   return (
                     <div key={entry.scenarioId} className={`rounded-xl border px-3 py-3 transition-all ${current ? 'border-emerald-400/40 bg-emerald-400/10' : 'border-white/10 bg-white/[0.025] hover:border-emerald-300/30 hover:bg-white/[0.06]'}`}>
                       <div className="flex items-center gap-3">
-                        <button onClick={() => onSelect(entry)} disabled={switching || current} className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default disabled:opacity-80">
+                        <button onClick={() => void selectScenario(entry)} disabled={switching || selection?.status === 'loading' || current} className="flex min-h-[44px] min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default disabled:opacity-80">
                           <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border font-mono text-[11px] ${current ? 'border-emerald-300/40 text-emerald-200' : 'border-white/10 text-white/35'}`}>{index + 1}</span>
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-xs font-bold text-white/85">{entry.title}</span>

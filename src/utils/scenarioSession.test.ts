@@ -55,6 +55,9 @@ describe('restoring scenario progress', () => {
     expect(restored.activeImageId).toBeNull();
     expect(restoreScenarioSession(scenario, null, scenario.syncConfig).timerStates.t1.seconds).toBe(600);
   });
+  it('uses initial timers for older saved sessions without timerStates', () => {
+    expect(restoreScenarioSession(scenario, { ...saved, timerStates: undefined } as unknown as typeof saved, scenario.syncConfig).timerStates.t1.seconds).toBe(600);
+  });
   it('ignores another scenario snapshot and invalid running baselines', () => {
     expect(restoreScenarioSession(scenario, { ...saved, scenarioId: 'other' }, scenario.syncConfig).timerStates.t1.seconds).toBe(600);
     expect(restoreScenarioSession(scenario, { ...saved, timerStates: { t1: { seconds: 3, isRunning: true, startTime: null } } }, scenario.syncConfig).timerStates.t1.isRunning).toBe(false);

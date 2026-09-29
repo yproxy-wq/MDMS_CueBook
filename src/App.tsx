@@ -1429,16 +1429,17 @@ function App() {
       if (entry.availability === 'mismatch') {
         bindScenarioFile(entry);
         setScenarioSwitching(false);
-        return;
+        return false;
       }
       const localScenario = await storageService.loadScenario(entry.scenarioId);
       if (!localScenario) {
         bindScenarioFile(entry);
         setScenarioSwitching(false);
-        return;
+        return false;
       }
       const nextScenario = applyScenarioSettings(validateAndMigrateScenario(localScenario), entry.settings);
       await commitScenarioSwitch(entry, nextScenario);
+      return true;
     } catch (error) {
       console.error('Scenario switch failed:', error);
       errorLogger.logOperationError(error, {
@@ -1447,18 +1448,19 @@ function App() {
       });
       alert('シナリオを切り替えられませんでした。現在のシナリオは維持されています。');
       setScenarioSwitching(false);
+      return false;
     }
   }, [bindScenarioFile, commitScenarioSwitch]);
 
   const handleScenarioSelect = useCallback(async (entry: ScenarioRegistryEntry) => {
-    if (entry.scenarioId === state.currentScenario.id) return;
+    if (entry.scenarioId === state.currentScenario.id) return false;
     const hasRunningTimer = Object.values(state.timerStates).some(timer => timer.isRunning);
     const hasProgress = hasRunningTimer || Object.keys(state.phaseResults).length > 0 || Boolean(state.phaseStartTime);
     if (hasProgress) {
       setPendingScenarioSwitch(entry);
-      return;
+      return 'confirmation' as const;
     }
-    await performScenarioSelect(entry);
+    return await performScenarioSelect(entry);
   }, [performScenarioSelect, state.currentScenario.id, state.phaseResults, state.phaseStartTime, state.timerStates]);
 
   scenarioShortcutHandlerRef.current = (slot: number) => {

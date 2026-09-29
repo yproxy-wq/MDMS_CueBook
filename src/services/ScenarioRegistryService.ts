@@ -102,7 +102,12 @@ export function extractScenarioSettings(scenario: Scenario): ScenarioSettings {
 }
 
 export function applyScenarioSettings(scenario: Scenario, settings?: ScenarioSettings): Scenario {
-  return settings ? { ...scenario, ...settings } : scenario;
+  if (!settings) return scenario;
+  const allowed: ScenarioSettings = {};
+  for (const key of SETTINGS_KEYS) {
+    if (settings[key] !== undefined) allowed[key] = settings[key] as never;
+  }
+  return { ...scenario, ...allowed };
 }
 
 export async function createScenarioBinding(

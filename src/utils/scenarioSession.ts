@@ -37,7 +37,7 @@ export function restoreScenarioSession(scenario: Scenario, saved: ScenarioSessio
   const firstPhase = scenario.phases[0]?.id || '';
   const timerStates = createTimerStatesForScenario(scenario);
   for (const id of Object.keys(timerStates)) {
-    const timer = session?.timerStates[id];
+    const timer = session?.timerStates?.[id];
     if (timer && Number.isFinite(timer.seconds) && (!timer.isRunning || Number.isFinite(timer.startTime))) {
       timerStates[id] = { ...timer };
     }
