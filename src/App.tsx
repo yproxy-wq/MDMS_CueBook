@@ -70,6 +70,7 @@ import { useAppModalState } from './hooks/useAppModalState';
 import { useAppAuthentication } from './hooks/useAppAuthentication';
 import { useScenarioRegistry } from './hooks/useScenarioRegistry';
 import { createScenarioSessionSnapshot, restoreScenarioSession } from './utils/scenarioSession';
+import { resolveScenarioForSelection } from './utils/scenarioSelection';
 import { createResetScenarioWithSnapshot } from './utils/scenarioReset';
 
 const EditorView = React.lazy(() => import('./components/EditorView'));
@@ -1431,7 +1432,8 @@ function App() {
         setScenarioSwitching(false);
         return false;
       }
-      const localScenario = await storageService.loadScenario(entry.scenarioId);
+      const storedScenario = await storageService.loadScenario(entry.scenarioId);
+      const localScenario = resolveScenarioForSelection(entry.scenarioId, storedScenario);
       if (!localScenario) {
         bindScenarioFile(entry);
         setScenarioSwitching(false);
