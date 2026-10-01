@@ -1,0 +1,14 @@
+{
+  "name": "cuebook-r2-functions",
+  "private": true,
+  "engines": {
+    "node": "22"
+  },
+  "main": "lib/r2Storage.js",
+  "dependencies": {
+    "@types/node": "^26.1.2",
+    "firebase-admin": "^14.2.0",
+    "firebase-functions": "^7.3.2",
+    "typescript": "^7.0.2"
+  }
+}

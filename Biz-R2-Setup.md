@@ -10,7 +10,7 @@
 | Firebase Secret ManagerのR2_ACCESS_KEY_ID／R2_SECRET_ACCESS_KEY | 有効なバージョンあり。秘密値は取得していない |
 | 独自ドメインからR2へのPUT／GETのCORSプリフライト | 両方204。AllowedOriginが独自ドメインと一致 |
 | BizのFunctions | CLI一覧は空。R2用Functionsは未配備 |
-| GitHub Environment biz-xtv のR2変数 | R2_ACCOUNT_ID／R2_BUCKET_NAMEが未登録 |
+| GitHub Environment biz-xtv のR2変数 | 登録済み。R2_ACCOUNT_IDは確認済みの手元の値と不一致のため要確認 |
 | 利用者のBizクレーム・実ファイルの保存／再生 | 未検証 |
 
 秘密鍵が存在することは、キーの有効性や対象バケットへの読み書き権限の証明ではない。コードのテスト、CORS確認、本番での実ファイル検証は区別する。
@@ -32,7 +32,7 @@
 ローカルからサーバーだけを配備する場合は、対象を明示する。
 
 ```powershell
-firebase deploy --only functions:createR2UploadIntent,functions:finalizeR2AssetUpload,functions:getR2OwnerTemporaryLink,functions:getR2SharedTemporaryLink,functions:touchR2AssetReferences,functions:cleanupUnreferencedR2Assets,firestore:indexes --project cuebook-biz-xtv
+firebase deploy --config firebase.r2.json --only functions:r2,firestore:indexes --project cuebook-biz-xtv
 ```
 
 配備後は `firebase functions:list --project cuebook-biz-xtv` で6関数を確認する。権限エラーの場合は、エラーに記載された不足権限を配備用サービスアカウントへ設定する必要がある。存在確認だけの段階では、不足権限や課金プランの不備を推測で断定しない。
@@ -83,3 +83,11 @@ Cloudflare → R2 → 対象バケット → Settings → CORS Policyで、既�
 5. 保存失敗時は既存音源が維持され、エラー表示と再試行ができることを確認する。通常版ではCloudflare音声保存操作が出ないことを確認する。
 
 Functionsへの呼び出しが404なら配備、permission-deniedならBizクレームを先に確認する。R2の403はキーの有効性・対象バケットのObject Read & Write権限・署名期限、ブラウザのCORSエラーはOriginとPUT／GET許可を確認する。
+
+## GitHub配備で確認した不足権限
+
+2026-10-01のActionsログで、配備用サービスアカウントが `cuebook-biz-xtv@appspot.gserviceaccount.com` に対する `iam.serviceAccounts.actAs` を持たず停止することを確認した。
+
+[Google Cloudのサービスアカウント](https://console.cloud.google.com/iam-admin/serviceaccounts?project=cuebook-biz-xtv) で上記実行アカウントを開き、Permissions（権限）→ Grant access（アクセスを許可）から、GitHub Environment `biz-xtv` の `FIREBASE_DEPLOYER_SERVICE_ACCOUNT` に設定している配備用アカウントへ **Service Account User（サービス アカウント ユーザー／roles/iam.serviceAccountUser）** を付与する。実行アカウントを対象とする権限に限定する。利用者のBizクレームやCloudflareのR2キーとは別の権限。
+
+専用ブランチからの実行は既存WIFのattribute conditionで拒否されるため、ワークフロー自体はmainから起動する。実際に配備するコードはrelease_tagで固定する。

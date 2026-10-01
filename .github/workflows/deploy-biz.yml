@@ -144,7 +144,7 @@ jobs:
             xtv) firebase_project="cuebook-biz-xtv" ;;
             *) exit 1 ;;
           esac
-          npx firebase-tools deploy --only functions:createR2UploadIntent,functions:finalizeR2AssetUpload,functions:getR2OwnerTemporaryLink,functions:getR2SharedTemporaryLink,functions:touchR2AssetReferences,functions:cleanupUnreferencedR2Assets,firestore:indexes --project "$firebase_project" --non-interactive
+          npx firebase-tools deploy --config firebase.r2.json --only functions:r2,firestore:indexes --project "$firebase_project" --non-interactive
 
       - name: Deploy Firebase Hosting
         shell: bash

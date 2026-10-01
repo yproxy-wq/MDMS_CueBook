@@ -119,7 +119,7 @@
    - 音声は既存R2容量枠（ユーザー1GB／シナリオ250MB）を画像・PDFと共有する。保存確定後にだけ音源URLを `r2://<assetId>` へ置換し、失敗時は既存URLを維持する。保存待ちの名前・URL編集は新しいURLと原子的に統合し、古いデバウンス更新による上書きを防ぐ。
    - `R2AudioPlayback` は所有者の短期GET URLから音声全体を取得し、ユーザー別のBlob URLキャッシュを既存AudioServiceへ渡す。短期URL失効によるBGMの中断を避け、通常URLの再生経路は維持する。待機中の停止／全停止／排他グループ／シナリオ変更・アンマウントで古い再生要求を無効化する。取得エラーをGM通知／試聴エラー欄へ表示する。
    - 音声のアセットIDも参照更新に含める。シナリオ容量台帳は有効なドキュメントパス `users/<uid>/storageScenarioUsage/<scenarioId>` を使用し、クライアントからは変更できない。
-   - Biz XTVの正規URLは `https://qbook-biz-xtv.keikeilab.net`（Firebase Hosting: `https://cuebook-biz-xtv.web.app`）。Biz配備ワークフローはR2サーバー6関数とFirestoreインデックスを先に配備してからHostingを更新する。`deploy_r2_functions=false` は既存サーバーを更新しない配備用。設定・検証手順は `Biz-R2-Setup.md` に記載する。
+   - Biz XTVの正規URLは `https://qbook-biz-xtv.keikeilab.net`（Firebase Hosting: `https://cuebook-biz-xtv.web.app`）。Biz配備ワークフローは `firebase.r2.json` の独立した `r2` codebaseでR2サーバー6関数とFirestoreインデックスを先に配備してからHostingを更新する。共通ソースのR2コンパイル成果物を `functions-r2` へ準備し、未使用のDropbox秘密鍵・設定を要求しない。`deploy_r2_functions=false` は既存サーバーを更新しない配備用。設定・検証手順は `Biz-R2-Setup.md` に記載する。
    - R2への移行完了までは、Dropbox追加・直接アップロード・URL入力を互換経路として維持する。既存のDropbox PDFアセットは読込継続し、新規のR2アセットと同じメディアID／短期URL契約で扱う。
    - 無料枠を守る初期運用は、シナリオあたり画像10枚を約7MB、PDFは1ページ約1MB・50ページを約50MBの計画目安とする。上限値・超過時の警告・削除はR2実装時にクライアントとFunctionsの両方で検証する。
 3. **変更検知トースト表示 (EditorView)**:

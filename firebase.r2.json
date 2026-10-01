@@ -1,0 +1,18 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "functions-r2",
+      "codebase": "r2",
+      "predeploy": [
+        "npm --prefix functions ci",
+        "npm --prefix functions run build",
+        "node functions/scripts/prepare-r2.cjs",
+        "npm --prefix functions-r2 ci"
+      ]
+    }
+  ]
+}

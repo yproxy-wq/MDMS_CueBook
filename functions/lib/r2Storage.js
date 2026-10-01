@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.cleanupUnreferencedR2Assets = exports.touchR2AssetReferences = exports.getR2SharedTemporaryLink = exports.getR2OwnerTemporaryLink = exports.finalizeR2AssetUpload = exports.createR2UploadIntent = exports.r2BucketName = exports.r2AccountId = exports.r2SecretAccessKey = exports.r2AccessKeyId = void 0;
+const r2AudioPolicy_1 = require("./r2AudioPolicy");
 const node_crypto_1 = require("node:crypto");
 const app_1 = require("firebase-admin/app");
 const firestore_1 = require("firebase-admin/firestore");
@@ -50,6 +51,7 @@ function requireContentType(value) {
         'image/webp',
         'image/gif',
         'application/pdf',
+        ...r2AudioPolicy_1.R2_AUDIO_TYPES,
     ];
     if (!supported.includes(contentType)) {
         throw new https_1.HttpsError('invalid-argument', '対応していないファイル形式です。');
@@ -168,7 +170,7 @@ async function inspectR2Object(objectKey) {
 async function releasePendingAsset(assetRef, asset) {
     await db.runTransaction(async (transaction) => {
         const usageRef = db.doc('users/' + asset.ownerUid + '/private/storage');
-        const scenarioUsageRef = db.doc('users/' + asset.ownerUid + '/private/storageScenarioUsage/' + asset.scenarioId);
+        const scenarioUsageRef = db.doc('users/' + asset.ownerUid + '/storageScenarioUsage/' + asset.scenarioId);
         const [usageSnapshot, scenarioUsageSnapshot] = await Promise.all([
             transaction.get(usageRef),
             transaction.get(scenarioUsageRef),
@@ -187,12 +189,15 @@ exports.createR2UploadIntent = (0, https_1.onCall)({
     const scenarioId = requireScenarioId(request.data?.scenarioId);
     const name = requireString(request.data?.name, 'name', 512);
     const contentType = requireContentType(request.data?.contentType);
+    if (contentType.startsWith('audio/') && !(0, r2AudioPolicy_1.canUploadR2Audio)(process.env.GCLOUD_PROJECT, request.auth?.token.cuebookPlan)) {
+        throw new https_1.HttpsError('permission-denied', '音声ストレージはBiz配備先専用です。');
+    }
     const sizeBytes = requireSize(request.data?.sizeBytes);
     const assetId = 'r2-' + (0, node_crypto_1.randomBytes)(18).toString('hex');
     const objectKey = 'users/' + uid + '/scenarios/' + scenarioId + '/' + assetId + '/' + safeFileName(name);
     const usageRef = db.doc('users/' + uid + '/private/storage');
     const assetRef = db.doc('users/' + uid + '/r2Assets/' + assetId);
-    const scenarioUsageRef = db.doc('users/' + uid + '/private/storageScenarioUsage/' + scenarioId);
+    const scenarioUsageRef = db.doc('users/' + uid + '/storageScenarioUsage/' + scenarioId);
     await db.runTransaction(async (transaction) => {
         const [usageSnapshot, scenarioUsageSnapshot] = await Promise.all([
             transaction.get(usageRef),
@@ -260,7 +265,7 @@ exports.finalizeR2AssetUpload = (0, https_1.onCall)({
         if (!currentAsset || currentAsset.status !== 'pending') {
             throw new https_1.HttpsError('failed-precondition', 'アップロード対象の状態が変化しました。');
         }
-        const scenarioUsageRef = db.doc('users/' + uid + '/private/storageScenarioUsage/' + asset.scenarioId);
+        const scenarioUsageRef = db.doc('users/' + uid + '/storageScenarioUsage/' + asset.scenarioId);
         const [usageSnapshot, scenarioUsageSnapshot] = await Promise.all([
             transaction.get(usageRef),
             transaction.get(scenarioUsageRef),
@@ -357,7 +362,7 @@ exports.cleanupUnreferencedR2Assets = (0, scheduler_1.onSchedule)({
             await deleteR2Object(asset.objectKey);
             await db.runTransaction(async (transaction) => {
                 const usageRef = db.doc('users/' + asset.ownerUid + '/private/storage');
-                const scenarioUsageRef = db.doc('users/' + asset.ownerUid + '/private/storageScenarioUsage/' + asset.scenarioId);
+                const scenarioUsageRef = db.doc('users/' + asset.ownerUid + '/storageScenarioUsage/' + asset.scenarioId);
                 const [usageSnapshot, scenarioUsageSnapshot] = await Promise.all([
                     transaction.get(usageRef),
                     transaction.get(scenarioUsageRef),
