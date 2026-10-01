@@ -8,6 +8,7 @@ import { fingerprintScenario, legacyScenarioKey } from '../services/ScenarioRegi
 import { createAsyncRequestGuard } from '../utils/asyncRequestGuard';
 import { errorLogger } from '../services/ErrorLogger';
 import { restoreScenarioSession } from '../utils/scenarioSession';
+import { resolveScenarioForSelection } from '../utils/scenarioSelection';
 
 interface UseSyncEngineProps {
   user: User | null;
@@ -38,7 +39,7 @@ export function useSyncEngine({
 
     const initApp = async () => {
       try {
-        const requested = scenarioId ? await storageService.loadScenario(scenarioId) : null;
+        const requested = scenarioId ? resolveScenarioForSelection(scenarioId, await storageService.loadScenario(scenarioId)) : null;
         if (!requestGuard.isActive()) return;
         const saved = requested || await storageService.loadScenario(legacyScenarioKey);
         if (!requestGuard.isActive()) return;

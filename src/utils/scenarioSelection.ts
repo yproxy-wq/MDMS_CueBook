@@ -1,4 +1,4 @@
-import { INITIAL_SCENARIO } from '../constants';
+import { INITIAL_SCENARIO, DEMO_SCENARIO, DEMO_DARUMA_SCENARIO } from '../constants';
 import type { Scenario } from '../types';
 
 /** Resolve a scenario selected by its registry/storage key, including built-in data not persisted yet. */
@@ -12,5 +12,5 @@ export function resolveScenarioForSelection(scenarioId: string, storedScenario: 
 
   // The guide is bundled with the app and can appear in the registry from the
   // initial in-memory state before its first autosave reaches IndexedDB.
-  return scenarioId === INITIAL_SCENARIO.id ? INITIAL_SCENARIO : null;
+  return [INITIAL_SCENARIO, DEMO_SCENARIO, DEMO_DARUMA_SCENARIO].find(scenario => scenario.id === scenarioId) || null;
 }

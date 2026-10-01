@@ -94,6 +94,16 @@ service cloud.firestore {
 
     // My Scenarios stores only metadata and settings. Scenario files remain local
     // to each device and are never accepted by this collection.
+    // Biz audio metadata is separate from device-local scenario documents.
+    match /users/{userId}/audioLibraries/{scenarioId} {
+      allow read: if isAuthenticated() && request.auth.uid == userId && request.auth.token.cuebookPlan == 'biz';
+      allow create, update: if isAuthenticated() && request.auth.uid == userId && request.auth.token.cuebookPlan == 'biz' &&
+        scenarioId.size() > 0 && scenarioId.size() < 256 &&
+        request.resource.data.keys().hasOnly(['sounds', 'schemaVersion', 'updatedAt']) &&
+        request.resource.data.sounds is list && request.resource.data.sounds.size() <= 1000 &&
+        request.resource.data.schemaVersion == 1 && request.resource.data.updatedAt is number;
+    }
+
     match /users/{userId}/scenarios/{scenarioId} {
       allow read: if isAuthenticated() && request.auth.uid == userId;
       allow delete: if isAuthenticated() && request.auth.uid == userId;

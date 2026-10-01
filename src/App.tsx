@@ -48,6 +48,7 @@ import { getPdfPageStateKey } from './utils/pdfAssetHelper';
 import { useDisplayNow } from './hooks/useDisplayNow';
 import { useSessionRecovery } from './hooks/useSessionRecovery';
 import { useAudioController } from './hooks/useAudioController';
+import { useAudioLibrarySync } from './hooks/useAudioLibrarySync';
 import { usePhaseManager } from './hooks/usePhaseManager';
 import { useSyncEngine } from './hooks/useSyncEngine';
 import { useQuotaCheck } from './hooks/useQuotaCheck';
@@ -508,6 +509,10 @@ function App() {
   const { scenarioEntries, refreshScenarioRegistry } = useScenarioRegistry({
     isReady, user, currentScenarioRef, setState,
   });
+
+  useAudioLibrarySync(user, isReady, state, setState, message => {
+    setMigrationToast({ show: true, title: '音源一覧の同期を確認してください', description: message, type: 'warning' });
+  }, handleStopSound);
 
   useEffect(() => {
     if (!isReady || !user) return;

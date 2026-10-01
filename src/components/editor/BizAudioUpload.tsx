@@ -58,7 +58,7 @@ function AuthorizedAudioUpload({ user, scenarioId, onSaved }: Props) {
           }
         }} />
     </label>
-    <p className="text-xs text-white/50">{access === 'checking' ? 'Biz権限を確認中…' : access === 'denied' ? 'Biz権限のあるアカウントでログインしてください。' : '1ファイル100MBまで。現在の音源URLを保存したファイルへ置き換えます。'}</p>
+    <p className="text-xs text-white/50">{access === 'checking' ? 'Biz権限を確認中…' : access === 'denied' ? 'Biz権限のあるアカウントでログインしてください。' : '1ファイル100MBまで。同じアカウント・シナリオの別端末へ音源一覧を同期します。端末から読み込んだファイルは、この端末だけで利用できます。'}</p>
     {message && <p role={message.error ? 'alert' : 'status'} className={`text-xs ${message.error ? 'text-red-300' : 'text-emerald-300'}`}>{message.text}</p>}
   </div>;
 }

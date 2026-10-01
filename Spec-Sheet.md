@@ -116,6 +116,10 @@
    - タイマー共有には `r2AssetId` のみを渡し、シナリオを開いたときは参照中のR2アセットをtouchして60日未参照判定を更新する。
    - R2アセットは最後にシナリオから参照された時刻を記録し、60日間未参照の素材を毎日03:30（日本時間）に削除する。未完了アップロードは24時間で回収する。
    - **Biz専用音声保存**: `VITE_CUEBOOK_TENANT=xtv` の音源編集だけに44px以上の「音声をCloudflareに保存」を表示する。Bizクレーム確認後のみ操作可。MP3／WAV／OGG／M4A／AAC／FLAC／WebM、1ファイル100MBまで。Functionsでも配備先 `cuebook-biz-xtv` とBizクレームを確認し、他の配備先では音声の新規保存を拒否する。
+   - **Biz音源一覧の端末間同期**: Bizクレーム確認後、`users/{uid}/audioLibraries/{scenarioId}` を購読し、曲名・種類・URL・音量・範囲・ループ・フェード・順序・R2アセット情報を同一アカウント／シナリオへ同期する。再生開始・停止や再生位置はこの一覧へ含めない。シナリオ台本・タイマー同期とは別の保存先とし、通常版では接続しない。
+   - サーバー由来の初回スナップショットを待ってから書き込みを許可する。空の初期端末は未作成一覧を初期化せず、既存端末の音源を消さない。書き込みは500msで集約し、Firestoreトランザクションの最新一覧に端末の差分だけを反映する。同時編集は音源ID／フィールドで統合し、別端末による削除を古い編集で復活させない。
+   - 未保存の差分はアカウント／シナリオ別に端末へ保持し、失敗時は2〜30秒の間隔で再試行する。同一障害で通知を反復しない。シナリオ退出時にも保存を開始し、遅延応答を別シナリオへ適用しない。同期用の一覧は1000音源・JSON 800KB以下とする。
+   - `blob:`／`data:` の端末専用音声URLはクラウドへ保存せず、元の端末でのみ保持する。別端末での再生は通常URLまたはCloudflare保存が必要。R2署名URLや秘密鍵は一覧へ保存しない。同梱ガイドと2つのデモは端末内に未保存でもURLのシナリオIDから初回復元する。
    - 音声は既存R2容量枠（ユーザー1GB／シナリオ250MB）を画像・PDFと共有する。保存確定後にだけ音源URLを `r2://<assetId>` へ置換し、失敗時は既存URLを維持する。保存待ちの名前・URL編集は新しいURLと原子的に統合し、古いデバウンス更新による上書きを防ぐ。
    - `R2AudioPlayback` は所有者の短期GET URLから音声全体を取得し、ユーザー別のBlob URLキャッシュを既存AudioServiceへ渡す。短期URL失効によるBGMの中断を避け、通常URLの再生経路は維持する。待機中の停止／全停止／排他グループ／シナリオ変更・アンマウントで古い再生要求を無効化する。取得エラーをGM通知／試聴エラー欄へ表示する。
    - 音声のアセットIDも参照更新に含める。シナリオ容量台帳は有効なドキュメントパス `users/<uid>/storageScenarioUsage/<scenarioId>` を使用し、クライアントからは変更できない。
@@ -289,6 +293,10 @@
 - `src/hooks/useAppModalState.ts`: 表示専用モーダル／ポップアップ状態の集約
 - `src/hooks/useAppAuthentication.ts`: Firebase認証状態、ログイン、ログアウト、同期セッションの安全な解除
 - `src/hooks/useScenarioRegistry.ts`: ローカル／クラウドのシナリオ台帳統合と更新
+- `src/hooks/useAudioLibrarySync.ts`: Biz認可・シナリオ別音源一覧の購読とReact状態反映
+- `src/services/AudioLibraryService.ts`: 音源一覧のFirestore購読・トランザクション保存
+- `src/services/AudioLibrarySession.ts`: 初回読込・差分保存・再試行・未保存変更の保持
+- `src/utils/audioLibrary.ts`: 音源ID／フィールド単位の差分統合・端末専用URL除外
 - `src/utils/scenarioSession.ts` / `src/utils/scenarioReset.ts`: シナリオ切替時の進行スナップショット、タイマー初期化、リセット前スナップショットを生成する純粋ロジック
 - `src/hooks/useDisplayNow.ts` / `src/components/LiveHeader.tsx`: root state を更新せず leaf component と Header wrapper で表示時刻を更新する層
 - `src/utils/timerNavigation.ts`: 台本閲覧と明示的なタイマー対象変更を分離する純粋ロジック
