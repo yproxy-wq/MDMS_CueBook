@@ -115,6 +115,11 @@
    - R2メディアはシナリオに `r2://<assetId>` と容量メタデータだけを保存する。GM画面は所有者用、子画面は共有capability用の短期URLを必要時に取得し、期限の1分前に更新する。短期URL・R2鍵をシナリオ／Firestore共有セッションへ保存しない。
    - タイマー共有には `r2AssetId` のみを渡し、シナリオを開いたときは参照中のR2アセットをtouchして60日未参照判定を更新する。
    - R2アセットは最後にシナリオから参照された時刻を記録し、60日間未参照の素材を毎日03:30（日本時間）に削除する。未完了アップロードは24時間で回収する。
+   - **Biz専用音声保存**: `VITE_CUEBOOK_TENANT=xtv` の音源編集だけに44px以上の「音声をCloudflareに保存」を表示する。Bizクレーム確認後のみ操作可。MP3／WAV／OGG／M4A／AAC／FLAC／WebM、1ファイル100MBまで。Functionsでも配備先 `cuebook-biz-xtv` とBizクレームを確認し、他の配備先では音声の新規保存を拒否する。
+   - 音声は既存R2容量枠（ユーザー1GB／シナリオ250MB）を画像・PDFと共有する。保存確定後にだけ音源URLを `r2://<assetId>` へ置換し、失敗時は既存URLを維持する。保存待ちの名前・URL編集は新しいURLと原子的に統合し、古いデバウンス更新による上書きを防ぐ。
+   - `R2AudioPlayback` は所有者の短期GET URLから音声全体を取得し、ユーザー別のBlob URLキャッシュを既存AudioServiceへ渡す。短期URL失効によるBGMの中断を避け、通常URLの再生経路は維持する。待機中の停止／全停止／排他グループ／シナリオ変更・アンマウントで古い再生要求を無効化する。取得エラーをGM通知／試聴エラー欄へ表示する。
+   - 音声のアセットIDも参照更新に含める。シナリオ容量台帳は有効なドキュメントパス `users/<uid>/storageScenarioUsage/<scenarioId>` を使用し、クライアントからは変更できない。
+   - Biz XTVの正規URLは `https://qbook-biz-xtv.keikeilab.net`（Firebase Hosting: `https://cuebook-biz-xtv.web.app`）。Biz配備ワークフローはR2サーバー6関数とFirestoreインデックスを先に配備してからHostingを更新する。`deploy_r2_functions=false` は既存サーバーを更新しない配備用。設定・検証手順は `Biz-R2-Setup.md` に記載する。
    - R2への移行完了までは、Dropbox追加・直接アップロード・URL入力を互換経路として維持する。既存のDropbox PDFアセットは読込継続し、新規のR2アセットと同じメディアID／短期URL契約で扱う。
    - 無料枠を守る初期運用は、シナリオあたり画像10枚を約7MB、PDFは1ページ約1MB・50ページを約50MBの計画目安とする。上限値・超過時の警告・削除はR2実装時にクライアントとFunctionsの両方で検証する。
 3. **変更検知トースト表示 (EditorView)**:
@@ -244,7 +249,7 @@
 | `Character` | `src/types.ts` | キャラクター情報。`handoutShareId` に Handout 専用の独立した 256-bit capability を保持する。 |
 | `Phase` | `src/types.ts` | シナリオの各進行フェーズ。正規名 `name` と、旧データ読込用 optional `title` を持つ。 |
 | `ScriptBlock` | `src/types.ts` | 台本ブロック。`markdown`、`outline`、`pdf`、`image` を扱う。 |
-| `SoundConfig` | `src/types.ts` | 音響素材の設定データ（id, name, url, type: BGM/SE, volume, loop, triggerMode） |
+| `SoundConfig` | `src/types.ts` | 音響素材の設定データ（id, name, url, type: BGM/SE, volume, loop, triggerMode, storageProvider?, storageAssetId?, sizeBytes?） |
 | `SoundCluster` | `src/types.ts` | 音響プリセット（id, name, phaseId?, soundIds[], volumes?, color?） |
 | `MediaResource` / `ImageResource` | `src/types.ts` | メディア素材（id, name, url, updatedAt, type: image/pdf/video） |
 | `SyncConfig` | `src/types.ts` | 同期ウィンドウ制御設定（timer/content 表示、配置、imageFit、画像ごとの文字色・overlay・overlayIntensity）。 |

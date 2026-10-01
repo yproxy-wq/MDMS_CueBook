@@ -1,3 +1,5 @@
+import type { User } from 'firebase/auth';
+import { isR2AssetUrl } from '../../services/R2AssetService';
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Scenario, SoundConfig, SoundType } from '../../types';
@@ -8,6 +10,7 @@ import { audioService } from '../../services/AudioService';
 
 interface SoundTabProps {
   scenario: Scenario;
+  user?: User | null;
   onUpdate: (updated: Scenario) => void;
   previewingSoundId: string | null;
   onTogglePreview: (sound: SoundConfig) => void;
@@ -15,7 +18,7 @@ interface SoundTabProps {
 }
 
 export const SoundTab: React.FC<SoundTabProps> = React.memo(({
-  scenario, onUpdate, previewingSoundId, onTogglePreview, onStopPreview
+  scenario, user = null, onUpdate, previewingSoundId, onTogglePreview, onStopPreview
 }) => {
   const [selectedSoundId, setSelectedSoundId] = useState<string | null>(null);
   const [isChangingSound, setIsChangingSound] = useState(false);
@@ -39,7 +42,7 @@ export const SoundTab: React.FC<SoundTabProps> = React.memo(({
 
   // Preload sounds when they are added or changed
   useEffect(() => {
-    const urls = sounds.map(s => s.url).filter(Boolean);
+    const urls = sounds.map(s => s.url).filter(url => Boolean(url) && !isR2AssetUrl(url));
     audioService.preload(urls.slice(0, 5)); // Preload first 5 for quick start
   }, [sounds]);
 
@@ -170,8 +173,11 @@ export const SoundTab: React.FC<SoundTabProps> = React.memo(({
         )}
         {selectedSound ? (
           <SoundSettingsPanel
-            key={selectedSound.id}
+            key={`${scenario.id}:${selectedSound.id}`}
             sound={selectedSound}
+            scenarioId={scenario.id}
+            user={user}
+            onSourceChange={() => onStopPreview?.(selectedSound.id)}
             onUpdate={(updates) => updateSound(selectedSound.id, updates)}
             onRemove={() => removeSound(selectedSound.id)}
             previewingSoundId={previewingSoundId}

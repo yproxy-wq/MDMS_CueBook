@@ -1,3 +1,5 @@
+import { getR2AssetIdFromUrl } from '../services/R2AssetService';
+import { resolveR2Sound } from '../services/R2AudioPlayback';
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Scenario, SoundConfig } from '../types';
@@ -35,6 +37,7 @@ const EditorView: React.FC<EditorViewProps> = React.memo(({
   scenario, user, onUpdate, canUndo = false, canRedo = false, onUndo, onRedo
 }) => {
   const [activeTab, setActiveTab] = useState<'phases' | 'sounds' | 'characters' | 'scenario' | 'identity' | 'media' | 'snapshots'>('phases');
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewingSoundId, setPreviewingSoundId] = useState<string | null>(null);
   const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
   const [showSavedToast, setShowSavedToast] = useState<boolean>(false);
@@ -106,15 +109,25 @@ const EditorView: React.FC<EditorViewProps> = React.memo(({
       audioService.stop(previewingSoundId);
     }
 
+    setPreviewError(null);
     const revision = ++previewRevision.current;
     previewIdRef.current = sound.id;
     try {
-      const played = await audioService.playPreview(sound, () => {
+      if (getR2AssetIdFromUrl(sound.url)) {
+        void audioService.activateAudio();
+        setPreviewingSoundId(sound.id);
+      }
+      const resolved = getR2AssetIdFromUrl(sound.url) ? await resolveR2Sound(sound) : sound;
+      if (revision !== previewRevision.current) return;
+      const played = await audioService.playPreview(resolved, () => {
         if (previewIdRef.current === sound.id) setPreviewingSoundId(null);
       });
       if (revision === previewRevision.current) setPreviewingSoundId(played ? sound.id : null);
     } catch (error) {
-      if (revision === previewRevision.current) setPreviewingSoundId(null);
+      if (revision === previewRevision.current) {
+        setPreviewingSoundId(null);
+        setPreviewError(error instanceof Error ? error.message : '音声の読み込みに失敗しました。');
+      }
       console.warn('音源の試聴に失敗しました。', error);
     }
   }, [previewingSoundId]);
@@ -177,7 +190,10 @@ const EditorView: React.FC<EditorViewProps> = React.memo(({
           )}
 
           {activeTab === 'sounds' && (
+            <>
+            {previewError && <p role="alert" className="mb-3 rounded-lg border border-red-400/20 bg-red-500/10 p-3 text-sm text-red-200">{previewError}</p>}
             <SoundTab
+              user={user}
               scenario={scenario}
               onUpdate={onUpdate}
               previewingSoundId={scenario.sounds.some(sound => sound.id === previewingSoundId) ? previewingSoundId : null}
@@ -190,6 +206,7 @@ const EditorView: React.FC<EditorViewProps> = React.memo(({
                 }
               }}
             />
+            </>
           )}
 
           {activeTab === 'phases' && (

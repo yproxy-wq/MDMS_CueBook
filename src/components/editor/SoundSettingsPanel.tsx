@@ -1,3 +1,5 @@
+import type { User } from 'firebase/auth';
+import { BizAudioUpload } from './BizAudioUpload';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { SoundConfig, SoundType } from '../../types';
 import { audioService } from '../../services/AudioService';
@@ -253,6 +255,9 @@ const FadeSettings = React.memo(function FadeSettings({sound, onUpdate}: {sound:
 });
 
 interface SoundSettingsPanelProps {
+  scenarioId?: string;
+  user?: User | null;
+  onSourceChange?: () => void;
   sound: SoundConfig;
   onUpdate: (updates: Partial<SoundConfig>) => void;
   onRemove: () => void;
@@ -261,11 +266,15 @@ interface SoundSettingsPanelProps {
 }
 
 export const SoundSettingsPanel: React.FC<SoundSettingsPanelProps> = React.memo(({
-  sound, onUpdate, onRemove, previewingSoundId, onTogglePreview
+  sound, scenarioId, user = null, onSourceChange, onUpdate, onRemove, previewingSoundId, onTogglePreview
 }) => {
+  const urlInputRef = useRef<HTMLInputElement>(null);
   const nameTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const urlTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingEditsRef = useRef<Partial<SoundConfig>>({});
+  useEffect(() => {
+    if (urlInputRef.current && pendingEditsRef.current.url === undefined) urlInputRef.current.value = sound.url || '';
+  }, [sound.url]);
   const latestUpdateRef = useRef(onUpdate);
   useEffect(() => { latestUpdateRef.current = onUpdate; }, [onUpdate]);
   const flushEdits = useCallback(() => {
@@ -354,6 +363,7 @@ export const SoundSettingsPanel: React.FC<SoundSettingsPanelProps> = React.memo(
               </label>
               <div className="group relative">
                 <input
+                  ref={urlInputRef}
                   aria-label="音源URL"
                   onBlur={flushEdits}
                   defaultValue={sound.url || ''}
@@ -388,6 +398,15 @@ export const SoundSettingsPanel: React.FC<SoundSettingsPanelProps> = React.memo(
                   <Upload size={12} />
                 </button>
               </div>
+              {scenarioId && import.meta.env.VITE_CUEBOOK_TENANT === 'xtv' && <BizAudioUpload key={`${scenarioId}:${sound.id}`} user={user} scenarioId={scenarioId} onSaved={updates => {
+                if (nameTimeoutRef.current) clearTimeout(nameTimeoutRef.current);
+                if (urlTimeoutRef.current) clearTimeout(urlTimeoutRef.current);
+                const edits = pendingEditsRef.current;
+                pendingEditsRef.current = {};
+                audioService.stop(sound.id, true);
+                onSourceChange?.();
+                latestUpdateRef.current({ ...edits, ...updates });
+              }} />}
             </div>
 
             <div className="space-y-1.5">

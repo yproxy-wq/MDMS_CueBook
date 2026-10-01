@@ -30,3 +30,5 @@ Gemini API key はこのクライアントアプリでは使用しません。�
 4. 開発環境で直接 URL の再読み込み・Google ログイン・同期画面を確認してから、stable / business を明示指定して配備します。
 
 配備前に必ず Firestore rules と GCP API key の HTTP referrer 制限を確認してください。Firebase接続設定はVite modeごとに分離し、Hostingの配備先と認証・Firestoreの接続先を一致させます。
+
+Biz XTVのCloudflare音声保存の設定・診断・配備手順は [Biz-R2-Setup.md](./Biz-R2-Setup.md) を参照してください。

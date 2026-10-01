@@ -40,7 +40,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Loader2, AlertTriangle, ChevronLeft, ChevronRight, RotateCcw, History, ShieldAlert, X, Layout, Minus, Plus, Settings, Play, Pause, SlidersHorizontal, Volume2 } from 'lucide-react';
 import { NetworkToast } from './components/NetworkToast';
 import { selectSyncMedia, transformDropboxUrl } from './utils/mediaHelper';
-import { getR2AssetId, touchR2AssetReferences } from './services/R2AssetService';
+import { getR2AssetId, getR2AssetIdFromUrl, touchR2AssetReferences } from './services/R2AssetService';
 import { createSecureShareId, createTimerSessionId, isSecureShareId } from './utils/syncHelper';
 import { getAppWindowMode } from './utils/appRoute';
 import { getPdfPageStateKey } from './utils/pdfAssetHelper';
@@ -358,22 +358,23 @@ function App() {
     [state.currentScenario.playerImages, fallbackMedia]
   );
   const r2ReferencedAssetIds = useMemo(() => [
-    ...(state.currentScenario.images || []),
-    ...(state.currentScenario.playerImages || []),
-  ].map(getR2AssetId).filter((assetId): assetId is string => assetId !== null), [
+    ...[...(state.currentScenario.images || []), ...(state.currentScenario.playerImages || [])].map(getR2AssetId),
+    ...(state.currentScenario.sounds || []).map(sound => getR2AssetIdFromUrl(sound.url)),
+  ].filter((assetId): assetId is string => assetId !== null), [
     state.currentScenario.images,
     state.currentScenario.playerImages,
+    state.currentScenario.sounds,
   ]);
-  const r2ReferenceKey = r2ReferencedAssetIds.join(',');
+  const r2ReferenceKey = [...new Set(r2ReferencedAssetIds)].sort().join(',');
 
   useEffect(() => {
-    if (!user || r2ReferencedAssetIds.length === 0) return;
-    void touchR2AssetReferences(r2ReferencedAssetIds).catch((error) => {
+    if (!user || !r2ReferenceKey) return;
+    void touchR2AssetReferences(r2ReferenceKey.split(',')).catch((error) => {
       // A stale imported asset may belong to another owner. It remains hidden
       // from this account rather than interrupting the current GM workflow.
       console.warn('[R2 asset] Failed to refresh scenario references:', error);
     });
-  }, [user, r2ReferencedAssetIds, r2ReferenceKey]);
+  }, [user, r2ReferenceKey]);
 
   // Floating timer hook
   const {
@@ -476,7 +477,9 @@ function App() {
     }
   }, [state.currentScenario.title, state.currentScenario.audioPreferences]);
 
-  const { handleStopSound, handleStopAllSounds, handlePlaySound, handleToggleSound } = useAudioController(state, setState, activateAudioWithPrefs);
+  const { handleStopSound, handleStopAllSounds, handlePlaySound, handleToggleSound } = useAudioController(state, setState, activateAudioWithPrefs, message => {
+    setMigrationToast({ show: true, title: '音声を再生できませんでした', description: message, type: 'warning' });
+  });
 
   const viewedPhase = useMemo(() =>
     selectViewedPhase(state.currentScenario, state.previewPhaseId),

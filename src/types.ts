@@ -17,6 +17,9 @@ export enum SoundType {
 export type FadeCurve = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out';
 
 export interface SoundConfig {
+  storageProvider?: 'r2';
+  storageAssetId?: string;
+  sizeBytes?: number;
   id: string;
   name: string;
   url: string; 

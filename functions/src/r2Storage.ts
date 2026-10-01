@@ -1,3 +1,4 @@
+import { R2_AUDIO_TYPES, canUploadR2Audio } from './r2AudioPolicy';
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore';
@@ -66,6 +67,7 @@ function requireContentType(value: unknown): string {
     'image/webp',
     'image/gif',
     'application/pdf',
+    ...R2_AUDIO_TYPES,
   ];
   if (!supported.includes(contentType)) {
     throw new HttpsError('invalid-argument', '対応していないファイル形式です。');
@@ -200,7 +202,7 @@ async function inspectR2Object(objectKey: string): Promise<{ sizeBytes: number; 
 async function releasePendingAsset(assetRef: FirebaseFirestore.DocumentReference, asset: R2Asset): Promise<void> {
   await db.runTransaction(async (transaction) => {
     const usageRef = db.doc('users/' + asset.ownerUid + '/private/storage');
-    const scenarioUsageRef = db.doc('users/' + asset.ownerUid + '/private/storageScenarioUsage/' + asset.scenarioId);
+    const scenarioUsageRef = db.doc('users/' + asset.ownerUid + '/storageScenarioUsage/' + asset.scenarioId);
     const [usageSnapshot, scenarioUsageSnapshot] = await Promise.all([
       transaction.get(usageRef),
       transaction.get(scenarioUsageRef),
@@ -220,12 +222,15 @@ export const createR2UploadIntent = onCall({
   const scenarioId = requireScenarioId(request.data?.scenarioId);
   const name = requireString(request.data?.name, 'name', 512);
   const contentType = requireContentType(request.data?.contentType);
+  if (contentType.startsWith('audio/') && !canUploadR2Audio(process.env.GCLOUD_PROJECT, request.auth?.token.cuebookPlan)) {
+    throw new HttpsError('permission-denied', '音声ストレージはBiz配備先専用です。');
+  }
   const sizeBytes = requireSize(request.data?.sizeBytes);
   const assetId = 'r2-' + randomBytes(18).toString('hex');
   const objectKey = 'users/' + uid + '/scenarios/' + scenarioId + '/' + assetId + '/' + safeFileName(name);
   const usageRef = db.doc('users/' + uid + '/private/storage');
   const assetRef = db.doc('users/' + uid + '/r2Assets/' + assetId);
-  const scenarioUsageRef = db.doc('users/' + uid + '/private/storageScenarioUsage/' + scenarioId);
+  const scenarioUsageRef = db.doc('users/' + uid + '/storageScenarioUsage/' + scenarioId);
 
   await db.runTransaction(async (transaction) => {
     const [usageSnapshot, scenarioUsageSnapshot] = await Promise.all([
@@ -297,7 +302,7 @@ export const finalizeR2AssetUpload = onCall({
     if (!currentAsset || currentAsset.status !== 'pending') {
       throw new HttpsError('failed-precondition', 'アップロード対象の状態が変化しました。');
     }
-    const scenarioUsageRef = db.doc('users/' + uid + '/private/storageScenarioUsage/' + asset.scenarioId);
+    const scenarioUsageRef = db.doc('users/' + uid + '/storageScenarioUsage/' + asset.scenarioId);
     const [usageSnapshot, scenarioUsageSnapshot] = await Promise.all([
       transaction.get(usageRef),
       transaction.get(scenarioUsageRef),
@@ -400,7 +405,7 @@ export const cleanupUnreferencedR2Assets = onSchedule({
       await deleteR2Object(asset.objectKey);
       await db.runTransaction(async (transaction) => {
         const usageRef = db.doc('users/' + asset.ownerUid + '/private/storage');
-        const scenarioUsageRef = db.doc('users/' + asset.ownerUid + '/private/storageScenarioUsage/' + asset.scenarioId);
+        const scenarioUsageRef = db.doc('users/' + asset.ownerUid + '/storageScenarioUsage/' + asset.scenarioId);
         const [usageSnapshot, scenarioUsageSnapshot] = await Promise.all([
           transaction.get(usageRef),
           transaction.get(scenarioUsageRef),

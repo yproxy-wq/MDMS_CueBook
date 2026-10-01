@@ -6,8 +6,9 @@ import { SoundType, SoundConfig } from '../../types';
 vi.mock('../../services/AudioService',()=>({audioService:{
   getPlaybackStats:vi.fn(()=>({current:12.5,duration:60,isLoading:false})),
   isPlaying:vi.fn(()=>false),
-  resetToStart:vi.fn(),
+  resetToStart:vi.fn(),stop:vi.fn(),
 }}));
+vi.mock('./BizAudioUpload',()=>({BizAudioUpload:({onSaved}:{onSaved:(updates:Partial<SoundConfig>)=>void})=><button aria-label="test-cloud-upload" onClick={()=>onSaved({url:'r2://asset',storageProvider:'r2'})}>upload</button>}));
 vi.mock('motion/react',()=>({
   AnimatePresence:({children}:{children:React.ReactNode})=>children,
   motion:{
@@ -36,7 +37,7 @@ beforeEach(async()=>{
   container=document.createElement('div');document.body.append(container);
   root=createRoot(container);await render();
 });
-afterEach(async()=>{await act(()=>root.unmount());container.remove();vi.unstubAllGlobals();});
+afterEach(async()=>{await act(()=>root.unmount());container.remove();vi.unstubAllGlobals();vi.unstubAllEnvs();vi.useRealTimers();});
 describe('sound settings disclosure',()=>{
   it('starts with four closed summaries and keeps preview available',async()=>{
     const details=Array.from(container.querySelectorAll('details'));
@@ -65,4 +66,18 @@ describe('sound settings disclosure',()=>{
     await setInput(container.querySelector('[aria-label="排他グループ"]') as HTMLSelectElement,'blue');
     expect(update).toHaveBeenCalledWith({chokeGroup:'blue'});
   });
+});
+
+it('atomically replaces a pending URL after cloud upload without a stale debounce overwrite',async()=>{
+  vi.stubEnv('VITE_CUEBOOK_TENANT','xtv');vi.useFakeTimers();
+  const sourceChanged=vi.fn();
+  await act(()=>root.render(<SoundSettingsPanel scenarioId="scenario" sound={sound} onSourceChange={sourceChanged} onUpdate={update} onRemove={vi.fn()} previewingSoundId={null} onTogglePreview={preview}/>));
+  await setInput(input('音源名'),'雨の演出');
+  await setInput(input('音源URL'),'https://example.com/old-pending.mp3');
+  expect(vi.getTimerCount()).toBeGreaterThan(0);
+  update.mockClear();
+  await act(()=>(container.querySelector('[aria-label="test-cloud-upload"]') as HTMLButtonElement).click());
+  expect(update).toHaveBeenCalledOnce();expect(update).toHaveBeenCalledWith({name:'雨の演出',url:'r2://asset',storageProvider:'r2'});expect(sourceChanged).toHaveBeenCalledOnce();
+  await act(()=>vi.advanceTimersByTime(1000));expect(update).toHaveBeenCalledOnce();
+  await render({...sound,url:'r2://asset'});expect(input('音源URL').value).toBe('r2://asset');
 });

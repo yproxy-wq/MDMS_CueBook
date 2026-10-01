@@ -1,6 +1,7 @@
 import { httpsCallable } from 'firebase/functions';
-import type { ImageResource } from '../types';
-import { functions } from '../lib/firebase';
+import type { ImageResource, SoundConfig } from '../types';
+import { auth, functions } from '../lib/firebase';
+import { getAudioUploadContentType } from '../utils/audioUpload';
 
 const R2_URL_PREFIX = 'r2://';
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
@@ -110,13 +111,25 @@ export async function uploadR2Asset(scenarioId: string, file: File): Promise<Ima
   };
 }
 
+export async function uploadR2Audio(scenarioId: string, file: File): Promise<Partial<SoundConfig>> {
+  if (import.meta.env.VITE_CUEBOOK_TENANT !== 'xtv') throw new Error('音声ストレージはBiz版専用です。');
+  const contentType = getAudioUploadContentType(file);
+  if (file.size < 1 || file.size > MAX_FILE_BYTES) throw new Error('ファイルサイズは1Bから100MBまでです。');
+  const { data: intent } = await createUploadIntent({ scenarioId, name: file.name, contentType, sizeBytes: file.size });
+  const response = await fetch(intent.uploadUrl, { method: 'PUT', headers: { 'Content-Type': contentType }, body: file });
+  if (!response.ok) throw new Error(`R2_UPLOAD_FAILED:${response.status}`);
+  await finalizeUpload({ assetId: intent.assetId });
+  return { url: r2AssetUrl(intent.assetId), storageProvider: 'r2', storageAssetId: intent.assetId, sizeBytes: file.size };
+}
+
 export async function getR2OwnerTemporaryUrl(assetId: string, forceRefresh = false): Promise<CachedLink> {
   if (!R2_ASSET_ID_PATTERN.test(assetId)) throw new Error('R2_ASSET_ID_INVALID');
-  const cached = ownerLinkCache.get(assetId);
+  const cacheKey = `${auth.currentUser?.uid || 'anonymous'}:${assetId}`;
+  const cached = ownerLinkCache.get(cacheKey);
   if (!forceRefresh && cached && cached.expiresAt > Date.now() + 60_000) return cached;
   const { data } = await getOwnerTemporaryLink({ assetId });
   const result = { ...data, expiresAt: Date.now() + data.expiresInSeconds * 1000 };
-  ownerLinkCache.set(assetId, result);
+  ownerLinkCache.set(cacheKey, result);
   return result;
 }
 

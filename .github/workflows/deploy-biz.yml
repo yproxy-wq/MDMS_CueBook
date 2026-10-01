@@ -13,6 +13,11 @@ on:
         type: choice
         options:
           - xtv
+      deploy_r2_functions:
+        description: 'R2保存用Functionsと容量管理インデックスも配備する'
+        required: true
+        type: boolean
+        default: true
 
 concurrency:
   group: firebase-biz-${{ inputs.tenant_code }}
@@ -61,8 +66,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # The root quality gate type-checks the Functions source as well. This
-      # installs its dependencies without deploying Functions.
       - name: Install Functions dependencies for verification
         run: npm --prefix functions ci
 
@@ -85,6 +88,10 @@ jobs:
               exit 1
             fi
           done
+          if [[ "$VITE_FIREBASE_PROJECT_ID" != "cuebook-biz-$TENANT_CODE" ]]; then
+            echo "::error::Firebase client project must match the Biz deployment destination"
+            exit 1
+          fi
           cat > .env.biz <<EOF
           VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY
           VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN
@@ -94,6 +101,24 @@ jobs:
           VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
           VITE_FIREBASE_MEASUREMENT_ID=$VITE_FIREBASE_MEASUREMENT_ID
           VITE_CUEBOOK_TENANT=$VITE_CUEBOOK_TENANT
+          EOF
+
+      - name: Configure R2 server parameters
+        if: ${{ inputs.deploy_r2_functions }}
+        shell: bash
+        env:
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+          R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
+        run: |
+          for name in R2_ACCOUNT_ID R2_BUCKET_NAME; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Configure $name in the biz-$TENANT_CODE GitHub Environment (see Biz-R2-Setup.md)"
+              exit 1
+            fi
+          done
+          cat > "functions/.env.cuebook-biz-$TENANT_CODE" <<EOF
+          R2_ACCOUNT_ID=$R2_ACCOUNT_ID
+          R2_BUCKET_NAME=$R2_BUCKET_NAME
           EOF
 
       - name: Verify
@@ -110,6 +135,16 @@ jobs:
           service_account: ${{ secrets.FIREBASE_DEPLOYER_SERVICE_ACCOUNT }}
           create_credentials_file: true
           export_environment_variables: true
+
+      - name: Deploy Firebase R2 server
+        if: ${{ inputs.deploy_r2_functions }}
+        shell: bash
+        run: |
+          case "$TENANT_CODE" in
+            xtv) firebase_project="cuebook-biz-xtv" ;;
+            *) exit 1 ;;
+          esac
+          npx firebase-tools deploy --only functions:createR2UploadIntent,functions:finalizeR2AssetUpload,functions:getR2OwnerTemporaryLink,functions:getR2SharedTemporaryLink,functions:touchR2AssetReferences,functions:cleanupUnreferencedR2Assets,firestore:indexes --project "$firebase_project" --non-interactive
 
       - name: Deploy Firebase Hosting
         shell: bash

@@ -1,3 +1,4 @@
+import { isR2AssetUrl } from '../../services/R2AssetService';
 
 import React from 'react';
 import { SoundConfig, SoundType } from '../../types';
@@ -20,7 +21,7 @@ export const SoundListItem: React.FC<SoundListItemProps> = React.memo(({
   return (
     <div 
       onClick={onClick}
-      onMouseEnter={() => sound.url && audioService.preload([sound.url])}
+      onMouseEnter={() => sound.url && !isR2AssetUrl(sound.url) && audioService.preload([sound.url])}
       className={`group relative flex items-center gap-1.5 p-2 rounded-xl border transition-all cursor-pointer ${
         isSelected 
           ? 'bg-white/10 border-white/20 shadow-lg' 
