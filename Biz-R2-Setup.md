@@ -9,7 +9,7 @@
 | ローカルのR2_ACCOUNT_ID／R2_BUCKET_NAME | `functions/.env.cuebook-biz-xtv` に設定あり |
 | Firebase Secret ManagerのR2_ACCESS_KEY_ID／R2_SECRET_ACCESS_KEY | 有効なバージョンあり。秘密値は取得していない |
 | 独自ドメインからR2へのPUT／GETのCORSプリフライト | 両方204。AllowedOriginが独自ドメインと一致 |
-| BizのFunctions | CLI一覧は空。R2用Functionsは未配備 |
+| BizのFunctions | 独立したr2 codebaseで6関数を配備済み。未ログインの保存API呼び出しは401で拒否 |
 | GitHub Environment biz-xtv のR2変数 | 登録済み。R2_ACCOUNT_IDは確認済みの手元の値と不一致のため要確認 |
 | 利用者のBizクレーム・実ファイルの保存／再生 | 未検証 |
 
@@ -91,3 +91,5 @@ Functionsへの呼び出しが404なら配備、permission-deniedならBizクレ
 [Google Cloudのサービスアカウント](https://console.cloud.google.com/iam-admin/serviceaccounts?project=cuebook-biz-xtv) で上記実行アカウントを開き、Permissions（権限）→ Grant access（アクセスを許可）から、GitHub Environment `biz-xtv` の `FIREBASE_DEPLOYER_SERVICE_ACCOUNT` に設定している配備用アカウントへ **Service Account User（サービス アカウント ユーザー／roles/iam.serviceAccountUser）** を付与する。実行アカウントを対象とする権限に限定する。利用者のBizクレームやCloudflareのR2キーとは別の権限。
 
 専用ブランチからの実行は既存WIFのattribute conditionで拒否されるため、ワークフロー自体はmainから起動する。実際に配備するコードはrelease_tagで固定する。
+
+R2サーバーとインデックスはログイン済みFirebase CLIから配備した。Cloud Runビルド用画像は7日後に整理する（R2素材には適用しない）。GitHub経由のFunctions再配備には上記IAM権限とアカウントIDの修正が必要。
