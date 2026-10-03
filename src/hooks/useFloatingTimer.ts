@@ -33,7 +33,7 @@ export function useFloatingTimer(
 
   const [timerY, setTimerY] = useState<number>(() => {
     const saved = localStorage.getItem('cuebook_timer_y');
-    return parseCoordinate(saved, 80);
+    return parseCoordinate(saved, 160);
   });
 
   const [isNearDock, setIsNearDock] = useState(false);
@@ -45,17 +45,35 @@ export function useFloatingTimer(
   const dragX = useMotionValue(0);
   const dragY = useMotionValue(0);
 
+  const [panelSize, setPanelSize] = useState({ width: 280, height: 220 });
+  // Include the control row in the panel's measured dimensions, without polling.
+  useEffect(() => {
+    const panel = timerRef.current;
+    if (!panel) return;
+    const measure = () => {
+      const rect = panel.getBoundingClientRect();
+      if (rect.width && rect.height) setPanelSize(previous => previous.width === rect.width && previous.height === rect.height ? previous : { width: rect.width, height: rect.height });
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(panel);
+    return () => observer.disconnect();
+  });
+  const safePosition = useCallback((x: number, y: number) => ({
+    x: constrainCoordinate(x, 10, Math.max(10, windowSize.width - panelSize.width - 10)),
+    y: constrainCoordinate(y, 10, Math.max(10, windowSize.height - panelSize.height - 10)),
+  }), [windowSize.width, windowSize.height, panelSize]);
+
   // Detect if floating timer is dragged or placed out of visual bounds
   const isTimerOutOfWindow = useMemo(() => {
     if (timerDocked && !isSpecialExtendedLayout) return false;
-    const timerW = 200;
+    const timerW = panelSize.width;
     return (
       timerX < 5 ||
       timerY < 5 ||
       timerX > windowSize.width - timerW - 5 ||
-      timerY > windowSize.height - 150
+      timerY > windowSize.height - panelSize.height - 5
     );
-  }, [timerX, timerY, timerDocked, isSpecialExtendedLayout, windowSize]);
+  }, [timerX, timerY, timerDocked, isSpecialExtendedLayout, windowSize, panelSize]);
 
   // Sync state variables to LocalStorage
   useEffect(() => {
@@ -70,34 +88,13 @@ export function useFloatingTimer(
     localStorage.setItem('cuebook_timer_y', String(timerY));
   }, [timerY]);
 
-  // Keep floating timer in bounds when window resize or layout modes change
+  // One clamp handles restored coordinates, rotations, layout changes and resizing.
   useEffect(() => {
-    if (!timerDocked || isSpecialExtendedLayout) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setTimerX(prev => constrainCoordinate(prev, 10, windowSize.width - 100));
-      setTimerY(prev => constrainCoordinate(prev, 10, windowSize.height - 100));
-    }
-  }, [timerDocked, isSpecialExtendedLayout, windowSize.width, windowSize.height]);
-
-  // Keep floating/docked timers inside visual safe zones upon mount, resize, layout mode changes
-  useEffect(() => {
-    const showFloating = !timerDocked || isSpecialExtendedLayout;
-    if (showFloating) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setTimerX(prev => {
-        if (prev <= 0 || prev >= windowSize.width) {
-          return windowSize.width > 240 ? Math.max(10, windowSize.width - 230) : 10;
-        }
-        return constrainCoordinate(prev, 10, windowSize.width - 100);
-      });
-      setTimerY(prev => {
-        if (prev <= 0 || prev >= windowSize.height) {
-          return 80;
-        }
-        return constrainCoordinate(prev, 10, windowSize.height - 100);
-      });
-    }
-  }, [timerDocked, isSpecialExtendedLayout, windowSize.width, windowSize.height]);
+    if (timerDocked && !isSpecialExtendedLayout) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTimerX(previous => safePosition(previous, 0).x);
+    setTimerY(previous => safePosition(0, hasDraggedTimer ? previous : Math.max(160, previous)).y);
+  }, [timerDocked, isSpecialExtendedLayout, safePosition, hasDraggedTimer]);
 
   // Read actual dock position dynamically
   const updateDockCoords = useCallback(() => {
@@ -122,21 +119,21 @@ export function useFloatingTimer(
   useEffect(() => {
     if (timerDocked && dockCoords && !isSpecialExtendedLayout) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setTimerX(dockCoords.x);
-      setTimerY(dockCoords.y);
+      setTimerX(safePosition(dockCoords.x, dockCoords.y).x);
+      setTimerY(safePosition(dockCoords.x, dockCoords.y).y);
     }
-  }, [timerDocked, dockCoords, isSpecialExtendedLayout]);
+  }, [timerDocked, dockCoords, isSpecialExtendedLayout, safePosition]);
 
   // Adjust coordinates dynamically to match dock position as default if never dragged
   useEffect(() => {
     if (!hasDraggedTimer && dockCoords && !timerDocked && !isSpecialExtendedLayout) {
       if (isFinite(dockCoords.x) && isFinite(dockCoords.y)) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setTimerX(dockCoords.x);
-        setTimerY(dockCoords.y);
+        setTimerX(safePosition(dockCoords.x, dockCoords.y).x);
+        setTimerY(safePosition(dockCoords.x, Math.max(160, dockCoords.y)).y);
       }
     }
-  }, [hasDraggedTimer, dockCoords, timerDocked, isSpecialExtendedLayout]);
+  }, [hasDraggedTimer, dockCoords, timerDocked, isSpecialExtendedLayout, safePosition]);
 
   const handleTimerDragStart = useCallback(() => {
     setHasDraggedTimer(true);
@@ -147,17 +144,17 @@ export function useFloatingTimer(
 
     const w = typeof window !== 'undefined' ? window.innerWidth : 1200;
     const h = typeof window !== 'undefined' ? window.innerHeight : 800;
-    const timerH = timerRef.current ? timerRef.current.offsetHeight : 113;
-    const timerW = 200;
+    const timerH = panelSize.height;
+    const timerW = panelSize.width;
     const MARGIN = 10;
 
     setDragConstraints({
       left: -timerX + MARGIN,
-      right: w - timerW - timerX - MARGIN,
+      right: Math.max(MARGIN, w - timerW - MARGIN) - timerX,
       top: -timerY + MARGIN,
-      bottom: h - timerH - timerY - MARGIN
+      bottom: Math.max(MARGIN, h - timerH - MARGIN) - timerY
     });
-  }, [timerX, timerY]);
+  }, [timerX, timerY, panelSize]);
 
   const handleTimerDrag = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: { point: { x: number; y: number } }) => {
     if (!dockCoords) return;
@@ -172,20 +169,19 @@ export function useFloatingTimer(
     if (dockCoords && isNearDockPosition(info.point.x, info.point.y, dockCoords.x, dockCoords.y, 200, 110)) {
       setTimerDocked(true);
       setIsNearDock(false);
-      setTimerX(dockCoords.x);
-      setTimerY(dockCoords.y);
+      setTimerX(safePosition(dockCoords.x, dockCoords.y).x);
+      setTimerY(safePosition(dockCoords.x, dockCoords.y).y);
     } else {
       setTimerDocked(false);
       setIsNearDock(false);
-      const w = typeof window !== 'undefined' ? window.innerWidth : 1200;
-      const h = typeof window !== 'undefined' ? window.innerHeight : 800;
-      setTimerX(constrainCoordinate(finalX, 10, w - 100));
-      setTimerY(constrainCoordinate(finalY, 10, h - 100));
+      const position = safePosition(finalX, finalY);
+      setTimerX(position.x);
+      setTimerY(position.y);
     }
 
     dragX.set(0);
     dragY.set(0);
-  }, [dockCoords, dragX, dragY]);
+  }, [dockCoords, dragX, dragY, safePosition]);
 
   const resetTimerPosition = useCallback(() => {
     setTimerDocked(false);
@@ -194,17 +190,17 @@ export function useFloatingTimer(
     localStorage.removeItem('cuebook_timer_has_dragged');
 
     if (dockCoords && isFinite(dockCoords.x) && isFinite(dockCoords.y)) {
-      setTimerX(dockCoords.x);
-      setTimerY(dockCoords.y);
+      setTimerX(safePosition(dockCoords.x, dockCoords.y).x);
+      setTimerY(safePosition(dockCoords.x, dockCoords.y).y);
     } else {
       const defaultX = typeof window !== 'undefined' && window.innerWidth > 0 ? (window.innerWidth - 230) : 960;
-      setTimerX(defaultX);
-      setTimerY(80);
+      setTimerX(safePosition(defaultX, 80).x);
+      setTimerY(safePosition(0, 80).y);
     }
 
     dragX.set(0);
     dragY.set(0);
-  }, [dockCoords, dragX, dragY]);
+  }, [dockCoords, dragX, dragY, safePosition]);
 
   return {
     timerDocked,

@@ -369,7 +369,7 @@ const ScriptViewer: React.FC<ScriptViewerProps> = React.memo(({
                   setEditingChecklists([...(phase.checklists || [])]);
                   setIsEditingChecklist(true);
                 }}
-                className="ml-2 text-white/40 hover:text-white transition-all duration-200 cursor-pointer p-1 rounded hover:bg-white/5 flex items-center justify-center shrink-0"
+                className="min-h-[44px] min-w-[44px] ml-2 text-white/40 hover:text-white transition-all duration-200 cursor-pointer p-1 rounded hover:bg-white/5 flex items-center justify-center shrink-0"
                 title="チェックリストを編集"
               >
                 <Edit3 size={11} />

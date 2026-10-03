@@ -48,7 +48,7 @@ function AuthorizedAudioUpload({ user, scenarioId, onSaved }: Props) {
             const updates = await uploadR2Audio(scenarioId, file);
             if (mounted.current && currentUser.current === uid) {
               latestSaved.current(updates);
-              setMessage({ error: false, text: 'Cloudflareに保存しました。再読み込み後も利用できます。' });
+              setMessage({ error: false, text: '音声ファイルをCloudflareに保存しました。別端末への反映は音源一覧の同期状態をご確認ください。' });
             }
           } catch (error) {
             if (mounted.current) setMessage({ error: true, text: getR2StorageErrorMessage(error) });

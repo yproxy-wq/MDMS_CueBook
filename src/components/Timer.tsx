@@ -541,7 +541,7 @@ const TimerCard: React.FC<TimerProps> = ({
              </AnimatePresence>
 
              {/* FLOATING CONTROLS POPOVER */}
-             <div className={`absolute top-full left-1/2 -translate-x-1/2 ${isDocked ? 'mt-0.5' : 'mt-2'} transition-all duration-300 z-[500] flex items-center gap-1 p-1 bg-[#121212] border border-white/20 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] backdrop-blur-3xl min-w-fit whitespace-nowrap ${
+             <div className={`timer-controls-popover absolute top-full left-1/2 -translate-x-1/2 ${isDocked ? 'mt-0.5' : 'mt-2'} transition-all duration-300 z-[500] flex items-center gap-1 p-1 bg-[#121212] border border-white/20 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] backdrop-blur-3xl min-w-fit whitespace-nowrap ${
                 showOverlay 
                   ? 'opacity-100 visible scale-100' 
                   : 'opacity-0 invisible scale-90 group-hover/timer:opacity-100 group-hover/timer:visible group-hover/timer:scale-100'

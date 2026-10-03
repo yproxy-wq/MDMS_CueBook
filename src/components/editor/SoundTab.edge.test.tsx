@@ -13,6 +13,7 @@ import { audioService } from '../../services/AudioService';
 let container:HTMLDivElement;
 let root:Root;
 let latest:Scenario;
+let updateScenario: React.Dispatch<React.SetStateAction<Scenario>>;
 const initial = {id:'edge-scenario',sounds:[
   {id:'a',name:'first',url:'',volume:0.6,type:SoundType.BGM},
   {id:'b',name:'second',url:'',volume:0.6,type:SoundType.BGM},
@@ -22,6 +23,7 @@ function Harness() {
   const [scenario,setScenario]=useState(initial);
   const [previewId,setPreviewId]=useState<string|null>(null);
   useEffect(() => { latest=scenario; }, [scenario]);
+  useEffect(() => { updateScenario=setScenario; }, []);
   return <SoundTab scenario={scenario} onUpdate={setScenario} previewingSoundId={previewId} onTogglePreview={sound=>setPreviewId(sound.id)} onStopPreview={()=>setPreviewId(null)}/>;
 }
 const input=(label:string)=>container.querySelector('[aria-label="'+label+'"]') as HTMLInputElement;
@@ -42,6 +44,19 @@ beforeEach(async()=>{
 });
 afterEach(async()=>{await act(()=>root.unmount());container.remove();vi.useRealTimers();vi.unstubAllGlobals();});
 describe('sound editing edge cases',()=>{
+  it('reflects a remote rename in an open name field',async()=>{
+    await select('first');
+    await act(()=>updateScenario(previous=>({...previous,sounds:previous.sounds.map(sound=>sound.id==='a'?{...sound,name:'remote name'}:sound)})));
+    expect(input('音源名').value).toBe('remote name');
+  });
+  it('preserves a pending name edit when a remote rename arrives',async()=>{
+    await select('first');
+    await change(input('音源名'),'local draft');
+    await act(()=>updateScenario(previous=>({...previous,sounds:previous.sounds.map(sound=>sound.id==='a'?{...sound,name:'remote name'}:sound)})));
+    expect(input('音源名').value).toBe('local draft');
+    await act(()=>vi.advanceTimersByTime(500));
+    expect(latest.sounds[0].name).toBe('local draft');
+  });
   it('stops deleted audio and restores its settings and list position with undo',async()=>{
     await select('second');
     await act(()=>(container.querySelector('[aria-label="音源を削除"]') as HTMLButtonElement).click());
@@ -64,11 +79,12 @@ describe('sound editing edge cases',()=>{
     await select('second');
     await act(()=>(container.querySelector('[aria-label="音源を削除"]') as HTMLButtonElement).click());
     await act(()=>vi.advanceTimersByTime(8001));
-    expect(container.querySelector('[role="status"]')).toBeNull();
+    expect(container.textContent).not.toContain('を削除しました');
     expect(latest.sounds.map(sound=>sound.id)).toEqual(['a','c']);
   });
   it('moves the actual selected search result, including its original upper neighbor',async()=>{
     await change(container.querySelector('[placeholder="音源を検索..."]') as HTMLInputElement,'second');
+    await act(()=>(container.querySelector('[aria-label="secondの操作"]') as HTMLButtonElement).click());
     const up=container.querySelector('[aria-label="secondを上へ移動"]') as HTMLButtonElement;
     expect(up.disabled).toBe(false);
     await act(()=>up.click());

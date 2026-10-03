@@ -1,4 +1,5 @@
 import { AppState } from '../types';
+import { v4 as uuidv4 } from 'uuid';
 
 const DB_NAME = 'TheMastermindDeckDB';
 const STORE_NAME = 'sessions';
@@ -7,10 +8,94 @@ const BINDING_STORE_NAME = 'scenarioBindings';
 // an existing database throws VersionError before onupgradeneeded can recover.
 const DB_VERSION = 3;
 const BACKUP_KEY = 'session_recovery_backup';
-const CLEAN_EXIT_KEY = 'session_recovery_clean_exit';
+
+export interface RecoveryBackup {
+  state: AppState;
+  timestamp: number;
+  key: string;
+  generation: string;
+  owner: string;
+  scope: string;
+  scenarioId: string;
+}
+export const recoveryPrefix = (scope: string, scenarioId: string) =>
+  `session_recovery_v2:${JSON.stringify([scope, scenarioId])}:`;
+export const recoveryCleanKey = (owner: string) => `cuebook_recovery_clean_v2:${owner}`;
+
+export function validRecoveryState(state: AppState): boolean {
+  const record = (value: unknown) => Boolean(value && typeof value === 'object' && !Array.isArray(value));
+  return Boolean(state?.currentScenario?.id && Array.isArray(state.currentScenario.phases) &&
+    typeof state.currentPhaseId === 'string' && typeof state.previewPhaseId === 'string' &&
+    Number.isFinite(state.volume) && state.volume >= 0 && state.volume <= 1 &&
+    record(state.isPlaying) && record(state.phaseResults) && record(state.phaseDurations) && record(state.timerStates) &&
+    (Array.isArray(state.usedSounds) || state.usedSounds instanceof Set) &&
+    Object.values(state.timerStates).every(timer => timer && Number.isFinite(timer.seconds) && timer.seconds >= 0 &&
+      typeof timer.isRunning === 'boolean' && (timer.startTime == null || Number.isFinite(timer.startTime))));
+}
+
+export function validRecoveryBackup(value: RecoveryBackup, scope: string, scenarioId: string, now = Date.now()): boolean {
+  return Boolean(value && value.scope === scope && value.scenarioId === scenarioId &&
+    value.state?.currentScenario?.id === scenarioId && validRecoveryState(value.state) &&
+    value.owner && value.generation && value.key === recoveryPrefix(scope, scenarioId) + value.owner &&
+    Number.isFinite(value.timestamp) && value.timestamp <= now && now - value.timestamp < 345600000);
+}
 
 class SessionRecoveryService {
   private db: IDBDatabase | null = null;
+
+  async saveOwnedBackup(state: AppState, scope: string, owner: string): Promise<void> {
+    const db = await this.getDB();
+    const scenarioId = state.currentScenario.id;
+    const sanitizeUrl = (url: string) => url?.startsWith('data:') && url.length > 50000 ? '' : url;
+    const backup = {
+      key: recoveryPrefix(scope, scenarioId) + owner, generation: uuidv4(),
+      scope, owner, scenarioId, timestamp: Date.now(),
+      state: { ...state, usedSounds: Array.from(state.usedSounds || []), currentScenario: {
+        ...state.currentScenario,
+        images: state.currentScenario.images?.map(image => ({ ...image, url: sanitizeUrl(image.url) })),
+        sounds: state.currentScenario.sounds?.map(sound => ({ ...sound, url: sanitizeUrl(sound.url) })),
+      } },
+    };
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(STORE_NAME, 'readwrite');
+      transaction.objectStore(STORE_NAME).put(backup, backup.key);
+      transaction.oncomplete = () => resolve();
+      transaction.onabort = transaction.onerror = () => reject(transaction.error);
+    });
+  }
+
+  async listOwnedBackups(scope: string, scenarioId: string): Promise<RecoveryBackup[]> {
+    const db = await this.getDB();
+    const prefix = recoveryPrefix(scope, scenarioId);
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORE_NAME, 'readonly');
+      const request = transaction.objectStore(STORE_NAME).getAll(IDBKeyRange.bound(prefix, prefix + '\uffff'));
+      request.onsuccess = () => resolve(request.result
+        .filter(value => validRecoveryBackup(value, scope, scenarioId))
+        .map(value => ({ ...value, state: { ...value.state, usedSounds: new Set(value.state.usedSounds || []) } }))
+        .sort((a, b) => b.timestamp - a.timestamp));
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  // Read and delete inside one transaction: a newer generation is never lost.
+  async consumeBackup(backup: RecoveryBackup): Promise<boolean> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      let consumed = false;
+      const transaction = db.transaction(STORE_NAME, 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.get(backup.key);
+      request.onsuccess = () => {
+        if (request.result?.generation === backup.generation) {
+          store.delete(backup.key);
+          consumed = true;
+        }
+      };
+      transaction.oncomplete = () => resolve(consumed);
+      transaction.onabort = transaction.onerror = () => reject(transaction.error);
+    });
+  }
 
   private async getDB(): Promise<IDBDatabase> {
     if (this.db) return this.db;
@@ -67,53 +152,6 @@ class SessionRecoveryService {
     });
   }
 
-  async saveBackup(state: AppState): Promise<void> {
-    try {
-      const db = await this.getDB();
-      
-      // Sanitize the scenario data to avoid saving gigantic Base64/data URLs
-      const sanitizedScenario = {
-        ...state.currentScenario,
-        images: state.currentScenario.images?.map(img => ({
-          ...img,
-          url: img.url && img.url.startsWith('data:') && img.url.length > 50000 ? '' : img.url
-        })),
-        sounds: state.currentScenario.sounds?.map(snd => ({
-          ...snd,
-          url: snd.url && snd.url.startsWith('data:') && snd.url.length > 50000 ? '' : snd.url
-        }))
-      };
-
-      // Since Set cannot be directly serialized, convert usedSounds Set to Array
-      const usedSoundsArray = state.usedSounds instanceof Set
-        ? Array.from(state.usedSounds)
-        : Array.isArray(state.usedSounds)
-          ? state.usedSounds
-          : [];
-
-      const backupStateData = {
-        ...state,
-        currentScenario: sanitizedScenario,
-        usedSounds: usedSoundsArray
-      };
-
-      const backup = {
-        state: backupStateData,
-        timestamp: Date.now()
-      };
-
-      return new Promise<void>((resolve, reject) => {
-        const transaction = db.transaction(STORE_NAME, 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.put(backup, BACKUP_KEY);
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
-      });
-    } catch (e) {
-      console.warn("Failed to save session backup to IndexedDB:", e);
-    }
-  }
-
   async getBackup(): Promise<{ state: AppState; timestamp: number } | null> {
     try {
       const db = await this.getDB();
@@ -123,7 +161,7 @@ class SessionRecoveryService {
         const request = store.get(BACKUP_KEY);
         request.onsuccess = () => {
           const result = request.result;
-          if (result && result.state) {
+          if (result && validRecoveryState(result.state)) {
             // Restore Set for usedSounds
             if (Array.isArray(result.state.usedSounds)) {
               result.state.usedSounds = new Set(result.state.usedSounds);
@@ -139,71 +177,11 @@ class SessionRecoveryService {
       });
     } catch (e) {
       console.warn("Failed to load session backup from IndexedDB:", e);
-      return null;
+      throw e;
     }
   }
 
-  async clearBackup(): Promise<void> {
-    try {
-      const db = await this.getDB();
-      return new Promise<void>((resolve, reject) => {
-        const transaction = db.transaction(STORE_NAME, 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.delete(BACKUP_KEY);
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
-      });
-    } catch (e) {
-      console.warn("Failed to clear session backup from IndexedDB:", e);
-    }
-  }
 
-  async saveCleanExit(value: boolean): Promise<void> {
-    try {
-      // Synchronously update localStorage as a robust synchronous backup
-      if (value) {
-        localStorage.setItem('cuebook_session_clean_exit_fallback', 'true');
-      } else {
-        localStorage.removeItem('cuebook_session_clean_exit_fallback');
-      }
-
-      const db = await this.getDB();
-      return new Promise<void>((resolve, reject) => {
-        const transaction = db.transaction(STORE_NAME, 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.put(value, CLEAN_EXIT_KEY);
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
-      });
-    } catch (e) {
-      console.warn("Failed to save clean exit status:", e);
-    }
-  }
-
-  async isCleanExit(): Promise<boolean> {
-    try {
-      // Try synchronous fallback first
-      if (localStorage.getItem('cuebook_session_clean_exit_fallback') === 'true') {
-        return true;
-      }
-
-      const db = await this.getDB();
-      return new Promise<boolean>((resolve) => {
-        const transaction = db.transaction(STORE_NAME, 'readonly');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.get(CLEAN_EXIT_KEY);
-        request.onsuccess = () => {
-          resolve(request.result === true);
-        };
-        request.onerror = () => {
-          resolve(true); // Default to clean in case of storage failure
-        };
-      });
-    } catch (e) {
-      console.warn("Failed to read clean exit state:", e);
-      return true;
-    }
-  }
 }
 
 export const sessionRecoveryService = new SessionRecoveryService();

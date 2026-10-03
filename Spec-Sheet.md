@@ -6,6 +6,25 @@
 ---
 
 ## 1. アプリケーション概要 (Overview)
+### セッション復元の範囲・所有者判定（v0.98-dev.40）
+- v0.98-dev.41: 所有者・保存世代・生存問い合わせのIDは既存uuidライブラリのv4生成を使用。randomUUID非対応環境ではgetRandomValuesへフォールバックし、Web Locks／BroadcastChannelの機能検出以前に起動が失敗することを防ぐ。
+- 認証確定とシナリオ読み込み完了後に起動判定を行う。`useAppAuthentication.authReady`が認証待ちを匿名アカウントと区別する。範囲変更・アンマウント後の非同期結果は適用しない。
+- IndexedDB sessionsストアの`session_recovery_v2:<JSON([accountScope,scenarioId])>:<owner>`へ保存。候補は`owner/scope/scenarioId/generation/key/timestamp/state`を持ち、4日未満・未来でない有限日時・状態構造・保存範囲を検証する。usedSoundsは配列保存・Set復元。大型Data URLの既存除外とR2参照・タイマーstartTime/secondsは維持する。
+- `RecoveryPresence`がタブ所有者のWeb Lockを文書の存続中保持する。保持中の所有者は異常終了にしない。Web Locks利用不能時のBroadcastChannelは肯定応答のみ生存確定とし、無応答は確認不能として任意案内を出す。毎秒のroot更新や心拍期限による死亡判定は行わない。
+- `pagehide(persisted=false)`は自身の`cuebook_recovery_clean_v2:<owner>`だけを正常終了と記録。BFCacheのpagehideでは記録しない。pageshowで自身の記録を解除し、旧共通trueフラグは新判定へ使わない。
+- 候補確認中の新しい保存は自タブの別キーへ継続する（初回5秒、以後15秒）。Web Lockで候補を予約し同時起動の二重モーダルを抑止する。復元は移行先保存成功後に適用し、削除は読み取り・世代比較・削除を同じトランザクションで実施し新世代を保護する。
+- 所有者不明の旧固定キーは読み取り専用で保持。タイトルを自動表示せず、ユーザーが自分の保存として明示確認した場合だけ現在シナリオとの一致を調べる。旧候補は復元／復元しない操作でも削除しない。復元モーダルは対象・日時、復元、候補破棄、保持して続けるを表示し、Escape・Tab循環・フォーカス復帰を提供する。
+- 新方式は同一オリジン・ブラウザ保存範囲内の復旧であり、端末間のFirestore同期とは別。正常終了・期限外のレコードはこの改修では自動削除せず保持する。
+
+### UI操作・同期状態表示（v0.98-dev.38）
+- v0.98-dev.39: 音源名の入力欄もURL欄と同様に受信データへ追従する。400msの保存待ちにあるローカル編集は受信名で上書きせず、デバウンス保存を維持する。
+- ユーザー承認済みの同期コア修正: `useTimerSync` はセッションごとに保存完了待ちの送信内容とシーケンスを保持。同じ内容のローカルスナップショット受信による再送を抑止し、内容の違う開始／停止・設定変更は通す。成功／失敗時に対応する待機状態を解除し、古い書き込みの完了で新しい待機状態を解除しない。時間算出と保存完了後のキャッシュ確定は維持する。
+- フローティングタイマーは `FloatingTimerOverlay` に集約し、編集画面では非表示。`useFloatingTimer` がResizeObserverで操作列を含めたパネル寸法を測り、復元座標・画面回転・ドラッグ後の位置を画面内へ補正する。時間算出・startTime/secondsは変更しない。
+- 音源一覧は選択用のネイティブbuttonと独立した操作buttonを使用。主要タッチ対象は44px以上とし、広い画面では一覧と詳細の二列、狭い画面では横方向の一覧を表示する。
+- ヘッダーにGM／編集切替を常設し、編集ナビゲーションと本文追加操作は日本語ラベルを表示する。マスター音量とUPDATE LOGを維持する。
+- `useModalFocus` は同期設定モーダルのTab循環・Escape・閉じた後のフォーカス復帰を管理する。QR、URL、Live Preview、集中制御の動作は維持する。
+- `AudioLibrarySyncStatus` はlocal/loading/syncing/synced/retrying/unavailable/offline。`AudioLibraryStatus` が音源一覧の状態を継続表示し、音声本体のCloudflare保存結果と区別する。購読エラー後は新しいスナップショット受信まで同期済みに戻さない。差分統合・再試行間隔・保存先は変更しない。
+
 - **名称**: CueBook
 - **用途**: TRPG・マーダーミステリー・リアル体験型ゲーム向け 高精度タイマー・音響・映像・シナリオ一元管理 GM（ゲームマスター）ワークスペース
 - **デザインコンセプト**: Dark, technical, brutalist, and elegant.

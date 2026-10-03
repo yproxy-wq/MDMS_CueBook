@@ -321,11 +321,11 @@ export const PhasesTab: React.FC<PhasesTabProps> = React.memo(({
             <button 
               onClick={() => onSetAllCollapsed(true)}
               className="px-2 py-1 text-[8px] font-black font-cinzel text-white/30 hover:text-white transition-colors"
-            >CLOSE ALL</button>
+            >すべて閉じる</button>
             <button 
               onClick={() => onSetAllCollapsed(false)}
               className="px-2 py-1 text-[8px] font-black font-cinzel text-white/30 hover:text-white transition-colors"
-            >OPEN ALL</button>
+            >すべて開く</button>
           </div>
         </div>
         <button 
@@ -982,10 +982,10 @@ export const PhasesTab: React.FC<PhasesTabProps> = React.memo(({
                        
                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 pt-2">
                           {[
-                            { type: 'markdown', icon: <AlignLeft size={14}/>, label: '+ MD_GUIDE' },
-                            { type: 'outline', icon: <ListIcon size={14}/>, label: '+ OUTLINE' },
-                            { type: 'pdf', icon: <FileText size={14}/>, label: '+ PDF_BLOCK' },
-                            { type: 'image', icon: <ImageIcon size={14}/>, label: '+ IMG_BLOCK' }
+                            { type: 'markdown', icon: <AlignLeft size={14}/>, label: '+ 本文' },
+                            { type: 'outline', icon: <ListIcon size={14}/>, label: '+ アウトライン' },
+                            { type: 'pdf', icon: <FileText size={14}/>, label: '+ PDF' },
+                            { type: 'image', icon: <ImageIcon size={14}/>, label: '+ 画像' }
                           ].map(btn => (
                             <button key={btn.type} onClick={() => addBlock(phase.id, btn.type as ScriptBlock['type'])} className="flex items-center justify-center gap-2 py-3 bg-white/5 border border-dashed border-white/10 rounded-xl text-[9px] font-black text-white/20 hover:text-white/50 hover:bg-white/[0.07] hover:border-white/30 transition-all font-cinzel shadow-sm">
                                {btn.icon} {btn.label}

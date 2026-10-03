@@ -1,112 +1,173 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { AppState } from '../types';
-import { sessionRecoveryService } from '../services/sessionRecoveryService';
+import { sessionRecoveryService, recoveryCleanKey, type RecoveryBackup } from '../services/sessionRecoveryService';
+import { RecoveryPresence } from '../services/recoveryPresence';
 
-interface IdleDeadline {
-  readonly didTimeout: boolean;
-  timeRemaining(): number;
-}
-
-interface RequestIdleCallbackOptions {
-  timeout?: number;
-}
-
-type RequestIdleCallbackHandle = number;
-
-declare global {
-  interface Window {
-    requestIdleCallback(
-      callback: (deadline: IdleDeadline) => void,
-      options?: RequestIdleCallbackOptions
-    ): RequestIdleCallbackHandle;
-    cancelIdleCallback(handle: RequestIdleCallbackHandle): void;
-  }
-}
-
-export function useSessionRecovery(isReady: boolean, state: AppState) {
-  const [backupData, setBackupData] = useState<{ state: AppState; timestamp: number } | null>(null);
+export function useSessionRecovery(isReady: boolean, state: AppState, scope: string | null) {
+  const [backupData, setBackupData] = useState<RecoveryBackup | null>(null);
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const [legacyAvailable, setLegacyAvailable] = useState(false);
+  const [recoveryError, setRecoveryError] = useState('');
+  const [busy, setBusy] = useState(false);
   const latestStateRef = useRef(state);
   latestStateRef.current = state;
+  const ownerRef = useRef('');
+  if (!ownerRef.current) ownerRef.current = uuidv4();
+  const owner = ownerRef.current;
+  const presenceRef = useRef<RecoveryPresence | null>(null);
+  const releaseClaimRef = useRef<(() => void) | null>(null);
+  const scenarioId = state.currentScenario.id;
+  const contextRef = useRef({ scope, scenarioId, revision: 0 });
+  if (contextRef.current.scope !== scope || contextRef.current.scenarioId !== scenarioId) {
+    contextRef.current = { scope, scenarioId, revision: contextRef.current.revision + 1 };
+  }
+  const mountedRef = useRef(false);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  const actionRef = useRef(false);
 
   useEffect(() => {
-    let active = true;
-    const checkRecoveryOnStartup = async () => {
-      if (!isReady) {
-        const isClean = await sessionRecoveryService.isCleanExit();
-        const backup = await sessionRecoveryService.getBackup();
-
-        if (active && backup && !isClean) {
-          // Verify backup state actually exists and is within last 96 hours (4 days)
-          if (backup.state && Date.now() - backup.timestamp < 345600000) {
-            setBackupData(backup);
-            setShowRecoveryModal(true);
-          }
-        }
-        
-        // Mark session as not cleanly exited during active use
-        if (active) {
-          await sessionRecoveryService.saveCleanExit(false);
-        }
-      }
+    if (!scope) return;
+    const presence = new RecoveryPresence(owner);
+    presenceRef.current = presence;
+    const mark = (clean: boolean) => {
+      try {
+        if (clean) localStorage.setItem(recoveryCleanKey(owner), 'true');
+        else localStorage.removeItem(recoveryCleanKey(owner));
+      } catch { /* Disabled storage must not block startup. */ }
     };
-
-    checkRecoveryOnStartup();
+    const hide = (event: PageTransitionEvent) => { if (!event.persisted) mark(true); };
+    const show = () => mark(false);
+    mark(false);
+    window.addEventListener('pagehide', hide);
+    window.addEventListener('pageshow', show);
     return () => {
-      active = false;
+      window.removeEventListener('pagehide', hide);
+      window.removeEventListener('pageshow', show);
+      presence.close();
+      if (presenceRef.current === presence) presenceRef.current = null;
     };
-  }, [isReady]);
+  }, [scope, owner]);
 
-  // Periodic Auto-save logic (runs independently from React state identity changes)
   useEffect(() => {
-    if (!isReady) return;
-
+    if (!isReady || !scope) return;
     let cancelled = false;
-    let timeoutId: number | undefined;
-    let idleCallbackId: RequestIdleCallbackHandle | undefined;
-
-    const scheduleSave = (delayMs: number) => {
-      timeoutId = window.setTimeout(() => {
-        if (cancelled) return;
-
-        const execute = async () => {
+    const presence = presenceRef.current;
+    setBackupData(null);
+    setShowRecoveryModal(false);
+    setRecoveryError('');
+    setBusy(false);
+    setLegacyAvailable(false);
+    releaseClaimRef.current?.();
+    releaseClaimRef.current = null;
+    void (async () => {
+      try {
+        const candidates = await sessionRecoveryService.listOwnedBackups(scope, scenarioId);
+        for (const candidate of candidates) {
           if (cancelled) return;
-          try {
-            await sessionRecoveryService.saveBackup(latestStateRef.current);
-          } catch (error) {
-            console.warn('[SessionRecovery] Periodic backup failed:', error);
-          } finally {
-            if (!cancelled) scheduleSave(15000);
-          }
-        };
-
-        if ('requestIdleCallback' in window) {
-          idleCallbackId = window.requestIdleCallback(() => { void execute(); }, { timeout: 2000 });
-        } else {
-          void execute();
+          if (candidate.owner === owner) continue;
+          let clean = false;
+          try { clean = localStorage.getItem(recoveryCleanKey(candidate.owner)) === 'true'; } catch { /* unknown */ }
+          if (clean) continue;
+          const status = await presence?.status(candidate.owner) ?? 'unknown';
+          if (cancelled) return;
+          if (status === 'alive') continue;
+          const release = await presence?.claim(candidate.key);
+          if (cancelled) { release?.(); return; }
+          if (!release) continue;
+          releaseClaimRef.current = release;
+          setBackupData(candidate);
+          setShowRecoveryModal(status === 'absent');
+          break;
         }
-      }, delayMs);
-    };
-
-    scheduleSave(5000);
-
+        // Legacy data has no account identity. Disclose no title until opt-in;
+        // do not overwrite or delete it as part of the new save protocol.
+        const legacy = await sessionRecoveryService.getBackup();
+        if (!cancelled) setLegacyAvailable(Boolean(legacy && Number.isFinite(legacy.timestamp) &&
+          legacy.timestamp <= Date.now() && Date.now() - legacy.timestamp < 345600000));
+      } catch (error) {
+        console.warn('[SessionRecovery] Backup lookup failed:', error);
+        if (!cancelled) setRecoveryError('バックアップを確認できませんでした。保存データは保持しています。');
+      }
+    })();
     return () => {
       cancelled = true;
-      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
-      if (idleCallbackId !== undefined && 'cancelIdleCallback' in window) {
-        window.cancelIdleCallback(idleCallbackId);
-      }
+      releaseClaimRef.current?.();
+      releaseClaimRef.current = null;
     };
-  }, [isReady]);
+  }, [isReady, scope, scenarioId, owner]);
 
-  // Before unload handler to mark clean exit
   useEffect(() => {
-    const handleUnload = () => {
-      localStorage.setItem('cuebook_session_clean_exit_fallback', 'true');
+    if (!isReady || !scope) return;
+    let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout>;
+    const save = async () => {
+      if (actionRef.current) {
+        timeout = setTimeout(() => { void save(); }, 15000);
+        return;
+      }
+      try { await sessionRecoveryService.saveOwnedBackup(latestStateRef.current, scope, owner); }
+      catch (error) {
+        console.warn('[SessionRecovery] Backup save failed:', error);
+        if (!cancelled) setRecoveryError('バックアップを保存できませんでした。ストレージの空き容量を確認してください。');
+      } finally { if (!cancelled) timeout = setTimeout(() => { void save(); }, 15000); }
     };
-    window.addEventListener('beforeunload', handleUnload);
-    return () => window.removeEventListener('beforeunload', handleUnload);
+    timeout = setTimeout(() => { void save(); }, 5000);
+    return () => { cancelled = true; clearTimeout(timeout); };
+  }, [isReady, scope, scenarioId, owner]);
+
+  const dismiss = useCallback(() => {
+    setShowRecoveryModal(false);
+    setBackupData(null);
+    setLegacyAvailable(false);
+    setRecoveryError('');
+    releaseClaimRef.current?.();
+    releaseClaimRef.current = null;
   }, []);
 
-  return { backupData, setBackupData, showRecoveryModal, setShowRecoveryModal };
+  const complete = useCallback(async (restore?: (saved: AppState) => void) => {
+    if (!backupData || actionRef.current || backupData.scope !== contextRef.current.scope || backupData.scenarioId !== contextRef.current.scenarioId) return;
+    actionRef.current = true;
+    const revision = contextRef.current.revision;
+    const stillCurrent = () => mountedRef.current && contextRef.current.revision === revision;
+    setBusy(true);
+    try {
+      // Persist destination before applying/deleting anything. Transaction
+      // generation comparison prevents deleting a concurrent newer save.
+      if (restore) {
+        await sessionRecoveryService.saveOwnedBackup(backupData.state, scope, owner);
+        if (!stillCurrent()) return;
+        restore(backupData.state);
+      }
+      if (backupData.owner !== 'legacy') await sessionRecoveryService.consumeBackup(backupData);
+      if (stillCurrent()) dismiss();
+    } catch (error) {
+      console.warn('[SessionRecovery] Recovery action failed:', error);
+      if (stillCurrent()) setRecoveryError('処理を完了できませんでした。バックアップは保持しています。再試行してください。');
+    } finally { actionRef.current = false; if (mountedRef.current) setBusy(false); }
+  }, [backupData, scope, owner, dismiss]);
+
+  const inspectLegacy = useCallback(async () => {
+    const revision = contextRef.current.revision;
+    let legacy: Awaited<ReturnType<typeof sessionRecoveryService.getBackup>>;
+    try { legacy = await sessionRecoveryService.getBackup(); }
+    catch {
+      if (mountedRef.current && contextRef.current.revision === revision) {
+        setRecoveryError('旧形式のバックアップを読み込めませんでした。データは保持しています。');
+      }
+      return;
+    }
+    if (!mountedRef.current || contextRef.current.revision !== revision) return;
+    if (!scope || !legacy || legacy.state?.currentScenario?.id !== scenarioId || !Number.isFinite(legacy.timestamp) ||
+      legacy.timestamp > Date.now() || Date.now() - legacy.timestamp >= 345600000) {
+      setRecoveryError('旧形式のバックアップは現在のシナリオに一致しません。データは保持しています。');
+      return;
+    }
+    setBackupData({ ...legacy, key: 'session_recovery_backup', generation: String(legacy.timestamp), scope, owner: 'legacy', scenarioId });
+    setShowRecoveryModal(true);
+    setLegacyAvailable(false);
+  }, [scope, scenarioId]);
+
+  return { backupData, showRecoveryModal, setShowRecoveryModal, legacyAvailable, inspectLegacy,
+    recoveryError, busy, complete, dismiss };
 }

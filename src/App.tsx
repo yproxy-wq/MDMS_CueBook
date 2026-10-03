@@ -18,7 +18,6 @@ import { INITIAL_SCENARIO, BLANK_SCENARIO } from './constants';
 import { audioService } from './services/AudioService';
 import { storageService } from './services/StorageService';
 import { syncService, TimerSyncData } from './services/SyncService';
-import { sessionRecoveryService } from './services/sessionRecoveryService';
 import PhaseSidebar from './components/PhaseSidebar';
 import PhaseProgressNav from './components/PhaseProgressNav';
 import PhaseCard from './components/PhaseCard';
@@ -47,6 +46,7 @@ import { getPdfPageStateKey } from './utils/pdfAssetHelper';
 
 import { useDisplayNow } from './hooks/useDisplayNow';
 import { useSessionRecovery } from './hooks/useSessionRecovery';
+import { useModalFocus } from './hooks/useModalFocus';
 import { useAudioController } from './hooks/useAudioController';
 import { useAudioLibrarySync } from './hooks/useAudioLibrarySync';
 import { usePhaseManager } from './hooks/usePhaseManager';
@@ -172,7 +172,7 @@ function App() {
   currentScenarioRef.current = state.currentScenario;
   const latestStateRef = useRef(state);
   latestStateRef.current = state;
-  const { user, handleLogin, handleConfirmLogin, handleLogout } = useAppAuthentication(
+  const { user, authReady, handleLogin, handleConfirmLogin, handleLogout } = useAppAuthentication(
     state.currentScenario.syncShareId, setShowLoginConfirmation,
   );
 
@@ -203,7 +203,10 @@ function App() {
     [state.currentScenario.themeColor]
   );
 
-  const { backupData, setBackupData, showRecoveryModal, setShowRecoveryModal } = useSessionRecovery(isReady, state);
+  const { backupData, showRecoveryModal, setShowRecoveryModal, legacyAvailable, inspectLegacy,
+    recoveryError, busy: recoveryBusy, complete: completeRecovery, dismiss: dismissRecovery } =
+    useSessionRecovery(isReady, state, authReady ? user?.uid || 'anonymous' : null);
+  const recoveryPanelRef = useModalFocus(showRecoveryModal, () => { if (!recoveryBusy) dismissRecovery(); });
 
   const onToggleTimer = useCallback((phaseOrTimerId?: string) => {
     const phases = state.currentScenario.phases || [];
@@ -510,7 +513,7 @@ function App() {
     isReady, user, currentScenarioRef, setState,
   });
 
-  useAudioLibrarySync(user, isReady, state, setState, message => {
+  const audioLibraryStatus = useAudioLibrarySync(user, isReady, state, setState, message => {
     setMigrationToast({ show: true, title: '音源一覧の同期を確認してください', description: message, type: 'warning' });
   }, handleStopSound);
 
@@ -1717,26 +1720,21 @@ function App() {
   };
 
   const handleRecoverSession = useCallback(async () => {
-    if (backupData && backupData.state) {
+    await completeRecovery(saved => {
       setState({
-        ...backupData.state,
+        ...saved,
         isEditorMode: getAppWindowMode(window.location.pathname) === 'edit',
       });
       // Synchronize audio service or other side effects if needed
-      if (backupData.state.volume !== undefined) {
-        audioService.setVolume(backupData.state.volume);
+      if (saved.volume !== undefined) {
+        audioService.setVolume(saved.volume);
       }
-    }
-    setShowRecoveryModal(false);
-    setBackupData(null);
-    await sessionRecoveryService.clearBackup();
-  }, [backupData, setShowRecoveryModal, setBackupData]);
+    });
+  }, [completeRecovery]);
 
   const handleDiscardRecovery = useCallback(async () => {
-    await sessionRecoveryService.clearBackup();
-    setShowRecoveryModal(false);
-    setBackupData(null);
-  }, [setShowRecoveryModal, setBackupData]);
+    await completeRecovery();
+  }, [completeRecovery]);
 
   const queryParams = new URLSearchParams(window.location.search);
   const view = queryParams.get('view');
@@ -2015,60 +2013,6 @@ function App() {
       )}
       </div>
 
-      {/* 統合ドラッグ＆ドックフローティングタイマー (v0.86 UI & UX Optimization) */}
-      {layoutMode !== '1-column' && activeTimer && activeTimerState && !isMenuOpen && (!timerDocked || isSpecialExtendedLayout) && (
-        <motion.div 
-          ref={timerRef}
-          drag
-          dragConstraints={dragConstraints}
-          dragMomentum={false}
-          dragElastic={0}
-          whileDrag={{ scale: 1.03, zIndex: 120, boxShadow: '0 30px 60px rgba(0,0,0,0.8)' }}
-          onDragStart={handleTimerDragStart}
-          onDrag={handleTimerDrag}
-          onDragEnd={handleTimerDragEnd}
-          className="fixed z-[100] w-[200px] cursor-grab active:cursor-grabbing touch-none shadow-[0_20px_50px_rgba(0,0,0,0.6)] bg-zinc-950/90 border-2 border-white/45 rounded-2xl backdrop-blur-md overflow-visible transition-[box-shadow] duration-300"
-          style={{ 
-            left: timerX,
-            top: timerY,
-            x: dragX,
-            y: dragY
-          }}
-        >
-          <TimerCard 
-            config={activeTimer}
-            timerLabelText={state.syncConfig?.timerLabelText}
-            seconds={activeTimerState.seconds}
-            isRunning={activeTimerState.isRunning}
-            startTime={activeTimerState.startTime}
-            themeColor={themeColor}
-            totalTimers={(timerTargetPhase?.timers || []).length}
-            activeTimerIndex={activeTimerIndex}
-            isCollapsed={false}
-            isLoggedIn={!!user}
-            onShare={getShareTimerUrl}
-            onToggle={onToggleTimer}
-            onReset={onResetTimer}
-            onAdjust={onAdjustTimer}
-            onOpenSyncModal={() => setShowSyncModal(true)}
-            timerFlashOnPauseEnabled={state.currentScenario.timerFlashOnPauseEnabled}
-            onSetDocked={setTimerDocked}
-            onPrev={() => {
-              const timerCount = (timerTargetPhase?.timers || []).length;
-              if (timerCount > 1) {
-                setActiveTimerIndex(prev => (prev - 1 + timerCount) % timerCount);
-              }
-            }}
-            onNext={() => {
-              const timerCount = (timerTargetPhase?.timers || []).length;
-              if (timerCount > 1) {
-                setActiveTimerIndex(prev => (prev + 1) % timerCount);
-              }
-            }}
-          />
-        </motion.div>
-      )}
-
       <main 
         className="flex-1 overflow-hidden z-10 relative h-full bg-black/20"
         onTouchStart={!state.isEditorMode ? handleTouchStart : undefined}
@@ -2083,7 +2027,8 @@ function App() {
               </div>
             }>
               <EditorView 
-                scenario={state.currentScenario} 
+                scenario={state.currentScenario}
+                audioLibraryStatus={audioLibraryStatus}
                 user={user}
                 onUpdate={handleUpdateScenario} 
                 currentPhaseId={state.currentPhaseId}
@@ -2900,40 +2845,54 @@ function App() {
         document.body
       )}
 
+      {!showRecoveryModal && (backupData || legacyAvailable || recoveryError) && createPortal(
+        <aside aria-label="バックアップの案内" className="fixed bottom-4 right-4 z-[900] max-w-sm rounded-xl border border-white/15 bg-zinc-950 p-4 text-xs text-white shadow-xl">
+          {recoveryError && <p role="status" className="mb-2 text-amber-300">{recoveryError}</p>}
+          {backupData && <><p>前回のバックアップがあります。終了状態は確認できません。</p>
+            <button className="min-h-11 px-3 text-emerald-300" onClick={() => setShowRecoveryModal(true)}>復元内容を確認</button>
+            <button className="min-h-11 px-3 text-white/60" onClick={dismissRecovery}>今は続ける</button></>}
+          {!backupData && legacyAvailable && <><p>旧形式のバックアップがあります。所有アカウントは確認できません。</p>
+            <button className="min-h-11 text-emerald-300" onClick={inspectLegacy}>自分の保存データとして確認する</button></>}
+          {!backupData && <button className="min-h-11 px-3 text-white/60" onClick={dismissRecovery}>今は続ける</button>}
+        </aside>, document.body
+      )}
       {showRecoveryModal && createPortal(
         <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/95 backdrop-blur-sm p-4">
-          <div className="bg-zinc-950 border border-[#1e50a2]/30 p-8 rounded-2xl max-w-md w-full shadow-[0_0_50px_rgba(30,80,162,0.15)] flex flex-col items-center gap-6 animate-in zoom-in-95 duration-200">
+          <div ref={recoveryPanelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="recovery-title" className="bg-zinc-950 border border-[#1e50a2]/30 p-8 rounded-2xl max-w-md w-full shadow-[0_0_50px_rgba(30,80,162,0.15)] flex flex-col items-center gap-6 animate-in zoom-in-95 duration-200">
             <div className="w-12 h-12 rounded-full bg-[#1e50a2]/10 border border-[#1e50a2]/30 flex items-center justify-center text-[#1e50a2] animate-pulse">
               <History size={24} />
             </div>
             
             <div className="text-center">
-              <h3 className="text-lg font-cinzel font-bold text-white tracking-widest uppercase">Session Recovery</h3>
+              <h3 id="recovery-title" className="text-lg font-cinzel font-bold text-white tracking-widest uppercase">セッションの復元</h3>
               <p className="text-xs text-white/40 font-mono tracking-wide leading-relaxed mt-1">
-                [ {backupData ? new Date(backupData.timestamp).toLocaleTimeString() : ''} - Unclean Exit Detected ]
+                {backupData?.state.currentScenario.title} · {backupData ? new Date(backupData.timestamp).toLocaleString() : ''}
               </p>
               <p className="text-xs text-white/70 font-sans leading-relaxed mt-4">
-                前回のセッションが正常に終了されなかった可能性があります。バックアップデータから状態を復元しますか？
+                このシナリオのバックアップから、進行・タイマー・表示設定を復元しますか？
               </p>
               <p className="text-[10px] text-[#1e50a2] font-mono tracking-wide uppercase mt-2">
-                Restoring will resume your exact logs, active timers, and player layout.
+                {recoveryError || '稼働中タイマーは保存時の基準時刻から再開します。'}
               </p>
             </div>
 
             <div className="flex flex-col gap-2.5 w-full mt-2">
               <button 
                 onClick={handleRecoverSession}
+                disabled={recoveryBusy}
                 className="w-full py-3.5 rounded-xl text-white font-bold font-sans text-xs tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg hover:brightness-110"
                 style={{ backgroundColor: themeColor }}
               >
-                <History size={14} /> セッションを復元する (Recover Last Session)
+                <History size={14} /> {recoveryBusy ? '処理中…' : 'セッションを復元する'}
               </button>
               <button 
                 onClick={handleDiscardRecovery}
+                disabled={recoveryBusy}
                 className="w-full py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 font-medium font-sans text-xs tracking-wider transition-all"
               >
-                破棄する (Discard Backup)
+                {backupData?.owner === 'legacy' ? '今回は復元しない（旧データを保持）' : 'このバックアップを破棄する'}
               </button>
+              <button disabled={recoveryBusy} onClick={dismissRecovery} className="min-h-11 text-xs text-white/60">今は続ける（バックアップを保持）</button>
             </div>
           </div>
         </div>,
@@ -3056,6 +3015,7 @@ function App() {
 
 
       <FloatingTimerOverlay
+        isEditorMode={state.isEditorMode}
         layoutMode={layoutMode}
         activeTimer={activeTimer}
         activeTimerState={activeTimerState}

@@ -1,5 +1,6 @@
 import type { User } from 'firebase/auth';
 import { BizAudioUpload } from './BizAudioUpload';
+import { isR2AssetUrl } from '../../services/R2AssetService';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { SoundConfig, SoundType } from '../../types';
 import { audioService } from '../../services/AudioService';
@@ -268,10 +269,14 @@ interface SoundSettingsPanelProps {
 export const SoundSettingsPanel: React.FC<SoundSettingsPanelProps> = React.memo(({
   sound, scenarioId, user = null, onSourceChange, onUpdate, onRemove, previewingSoundId, onTogglePreview
 }) => {
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
   const nameTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const urlTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingEditsRef = useRef<Partial<SoundConfig>>({});
+  useEffect(() => {
+    if (nameInputRef.current && pendingEditsRef.current.name === undefined) nameInputRef.current.value = sound.name || '';
+  }, [sound.name]);
   useEffect(() => {
     if (urlInputRef.current && pendingEditsRef.current.url === undefined) urlInputRef.current.value = sound.url || '';
   }, [sound.url]);
@@ -313,6 +318,7 @@ export const SoundSettingsPanel: React.FC<SoundSettingsPanelProps> = React.memo(
               <div className="flex-1 min-w-0">
                <input
                  aria-label="音源名"
+                 ref={nameInputRef}
                  onBlur={flushEdits}
                  defaultValue={sound.name || ''}
                  onChange={e => {
@@ -327,7 +333,7 @@ export const SoundSettingsPanel: React.FC<SoundSettingsPanelProps> = React.memo(
                <div className="flex items-center gap-2">
                 <span className="text-[9px] font-black font-cinzel text-white/20 uppercase tracking-widest">{sound.type}</span>
                 <div className="w-1 h-1 rounded-full bg-white/10" />
-                <span className="text-[9px] font-mono text-white/20">{sound.id.slice(0, 8)}</span>
+                <span className="text-xs text-white/55">{isR2AssetUrl(sound.url) ? 'Cloudflare保存' : /^(blob:|data:)/i.test(sound.url) ? 'この端末のファイル' : sound.url ? '外部URL' : 'ファイル未設定'}</span>
               </div>
             </div>
           </div>

@@ -41,6 +41,7 @@ interface LastSyncTracker {
 
 const lastSyncCache: Record<string, LastSyncTracker> = {};
 const syncWriteSequences: Record<string, number> = {};
+const pendingSyncPayloads = new Map<string, { signature: string; sequence: number }>();
 
 export function useTimerSync(
   user: User | null,
@@ -246,6 +247,10 @@ export function useTimerSync(
     });
 
     const dataToSync = prepareDataToSync();
+    // Firestore can echo a local snapshot before its durable write completes.
+    // Keep that echo from starting the same write again and starving its acknowledgement.
+    const signature = JSON.stringify(dataToSync);
+    if (pendingSyncPayloads.get(sessionId)?.signature === signature) return;
 
     // Deep compare check (simple version)
     const isDataIdentical = (local: TimerSyncData, remote: Partial<TimerSyncData>) => {
@@ -350,6 +355,7 @@ export function useTimerSync(
     // Configuration adjustments, layout choices, and media swaps are debounced to prevent Firestore write spikes.
     const writeSequence = (syncWriteSequences[sessionId] || 0) + 1;
     syncWriteSequences[sessionId] = writeSequence;
+    pendingSyncPayloads.set(sessionId, { signature, sequence: writeSequence });
     const writePromise = hasStatusChanged || isManualAdjustment
       ? syncService.setTimerInstant(sessionId, dataToSync)
       : syncService.updateTimer(sessionId, dataToSync);
@@ -364,6 +370,10 @@ export function useTimerSync(
         delete lastSyncCache[sessionId];
       }
       console.warn('[Sync] Durable write failed; the next state change will retry:', error);
+    }).finally(() => {
+      if (pendingSyncPayloads.get(sessionId)?.sequence === writeSequence) {
+        pendingSyncPayloads.delete(sessionId);
+      }
     });
   }, [
     state.timerStates, 

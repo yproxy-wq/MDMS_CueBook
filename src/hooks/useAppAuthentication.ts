@@ -11,9 +11,13 @@ export function useAppAuthentication(
   setShowLoginConfirmation: (show: boolean) => void,
 ) {
   const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, setUser);
+    const unsubscribe = onAuthStateChanged(auth, nextUser => {
+      setUser(nextUser);
+      setAuthReady(true);
+    });
     return () => unsubscribe();
   }, []);
 
@@ -47,5 +51,5 @@ export function useAppAuthentication(
     }
   }, [syncShareId, user]);
 
-  return { user, handleLogin, handleConfirmLogin, handleLogout };
+  return { user, authReady, handleLogin, handleConfirmLogin, handleLogout };
 }

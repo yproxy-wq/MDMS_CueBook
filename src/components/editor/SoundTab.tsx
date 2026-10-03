@@ -7,9 +7,12 @@ import { Music, Plus, Search } from 'lucide-react';
 import { SoundListItem } from './SoundListItem';
 import { SoundSettingsPanel } from './SoundSettingsPanel';
 import { audioService } from '../../services/AudioService';
+import { AudioLibraryStatus } from './AudioLibraryStatus';
+import type { AudioLibrarySyncStatus } from '../../services/AudioLibrarySession';
 
 interface SoundTabProps {
   scenario: Scenario;
+  syncStatus?: AudioLibrarySyncStatus;
   user?: User | null;
   onUpdate: (updated: Scenario) => void;
   previewingSoundId: string | null;
@@ -18,7 +21,7 @@ interface SoundTabProps {
 }
 
 export const SoundTab: React.FC<SoundTabProps> = React.memo(({
-  scenario, user = null, onUpdate, previewingSoundId, onTogglePreview, onStopPreview
+  scenario, user = null, onUpdate, previewingSoundId, onTogglePreview, onStopPreview, syncStatus
 }) => {
   const [selectedSoundId, setSelectedSoundId] = useState<string | null>(null);
   const [isChangingSound, setIsChangingSound] = useState(false);
@@ -104,8 +107,8 @@ export const SoundTab: React.FC<SoundTabProps> = React.memo(({
   };
 
   return (
-    <div className="flex flex-col h-full gap-4 animate-in fade-in duration-300">
-      {deletedSound?.scenarioId === scenario.id && <div role="status" className="flex min-h-[44px] items-center justify-between gap-3 rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 text-sm text-white/80">
+    <div className="sound-library grid min-h-full grid-cols-1 items-start gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+      {deletedSound?.scenarioId === scenario.id && <div role="status" className="col-span-full flex min-h-[44px] items-center justify-between gap-3 rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 text-sm text-white/80">
         <span>「{deletedSound.sound.name}」を削除しました</span>
         <button type="button" className="min-h-[44px] shrink-0 px-3 text-amber-300" onClick={() => {
           if (!sounds.some(sound => sound.id === deletedSound.sound.id)) {
@@ -118,13 +121,14 @@ export const SoundTab: React.FC<SoundTabProps> = React.memo(({
         }}>元に戻す</button>
       </div>}
       {/* Top Section: List */}
-      <div className="flex flex-col gap-3 shrink-0">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+      <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-white/10 bg-white/[0.02] p-3">
+        <div className="flex flex-col gap-3 px-1">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
             <h3 className="text-sm font-medium text-white/70 flex items-center gap-2">
               <Music size={14} /> 音源リスト
             </h3>
-            <div className="relative w-full min-w-0 sm:w-64">
+            <AudioLibraryStatus status={syncStatus} />
+            <div className="relative w-full min-w-0">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" />
               <input
                 value={searchQuery || ''}
@@ -142,9 +146,9 @@ export const SoundTab: React.FC<SoundTabProps> = React.memo(({
           </button>
         </div>
 
-        <div className="flex overflow-x-auto gap-3 pb-3 scrollbar-thin scrollbar-thumb-white/10">
+        <div className="flex overflow-x-auto gap-3 pb-2 lg:max-h-[65vh] lg:flex-col lg:overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
           {filteredSounds.map((sound) => (
-            <div key={sound.id} className="w-56 shrink-0">
+            <div key={sound.id} className="w-64 shrink-0 lg:w-full">
               <SoundListItem
                 sound={sound}
                 isSelected={selectedSoundId === sound.id}
@@ -165,7 +169,7 @@ export const SoundTab: React.FC<SoundTabProps> = React.memo(({
       </div>
 
       {/* Bottom Section: Settings */}
-      <div className="flex-1 min-w-0 border-t border-white/5 pt-4 relative">
+      <div className="min-w-0 relative">
         {isChangingSound && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
              <div className="w-8 h-8 border-2 border-white/10 border-t-white/60 rounded-full animate-spin" />

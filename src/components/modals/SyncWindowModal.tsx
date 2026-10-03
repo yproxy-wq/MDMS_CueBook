@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useModalFocus } from '../../hooks/useModalFocus';
 import { motion, AnimatePresence } from 'motion/react';
 import { Share, Copy, Check, ExternalLink, Play, Pause, RotateCcw, Monitor, Image as ImageIcon, Clock, Layout, Maximize2, X, HelpCircle, FileText, Upload, Cloud, Loader2, AlertTriangle } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -430,6 +431,7 @@ const SyncWindowModal: React.FC<SyncWindowModalProps> = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const dialogRef = useModalFocus(isOpen, onClose, '[aria-label="同期画面の詳細設定を開く"], [title="メニュー"]');
   if (typeof document === 'undefined' || !isOpen) return null;
 
   const shareUrl = onShareSync();
@@ -444,6 +446,11 @@ const SyncWindowModal: React.FC<SyncWindowModalProps> = ({
       />
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="子ウィンドウ設定"
+        tabIndex={-1}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         className="relative bg-zinc-950 border border-white/10 rounded-[32px] w-full max-w-[960px] shadow-2xl overflow-hidden flex flex-col h-full max-h-[95vh] md:max-h-[85vh]"
         onClick={(e) => e.stopPropagation()}
@@ -556,7 +563,8 @@ const SyncWindowModal: React.FC<SyncWindowModalProps> = ({
                 </div>
                 <button 
                   onClick={onClose}
-                  className="p-2 rounded-full hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                  aria-label="子ウィンドウ設定を閉じる"
+                  className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-all"
                 >
                   <X size={20} />
                 </button>

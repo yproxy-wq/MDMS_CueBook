@@ -648,22 +648,19 @@ const Header: React.FC<HeaderProps> = React.memo(({
         )}
 
         <div className="col-start-2 row-start-1 flex items-center gap-0 lg:gap-4 shrink-0 h-full ml-auto">
-          {isEditorMode && (
             <button
               onClick={onToggleEditor}
-              className="p-2 rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 text-white/60 hover:text-white transition-all flex items-center gap-1.5 border border-white/10 shadow-sm mr-1.5 duration-150"
-              aria-label="GM画面に戻る" title="通常モード（GM画面）に戻る"
+              className="cuebook-header-action p-2 rounded-lg bg-white/5 hover:bg-white/10 active:scale-95 text-white/60 hover:text-white transition-all flex items-center gap-1.5 border border-white/10 shadow-sm mr-1.5 duration-150"
+              aria-label={isEditorMode ? "GM画面に戻る" : "シナリオを編集"} title={isEditorMode ? "GM画面に戻る" : "シナリオを編集"}
             >
-              <ChevronLeft size={16} />
-              <span className="hidden md:inline text-[10px] font-bold font-sans tracking-widest text-white/80 leading-none">GM画面に戻る</span>
+              {isEditorMode ? <ChevronLeft size={16} /> : <Settings size={16} />}
+              <span className="hidden md:inline text-[10px] font-bold font-sans tracking-widest text-white/80 leading-none">{isEditorMode ? "GM画面に戻る" : "編集"}</span>
             </button>
-          )}
-
           <div className="relative" ref={menuRef}>
             {/* Scenario Map Button */}
             <button 
               onClick={() => setShowScenarioMap(true)}
-              className="p-2 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-all"
+              className="cuebook-header-action inline-flex items-center justify-center p-2 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-all"
               title="シナリオマップ"
             >
               <Map size={18} />
@@ -672,7 +669,7 @@ const Header: React.FC<HeaderProps> = React.memo(({
             {/* Keyboard Shortcuts Button */}
             <button 
               onClick={() => setShowShortcuts(true)}
-              className="p-2 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-all"
+              className="cuebook-header-action inline-flex items-center justify-center p-2 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-all"
               title="ショートカットキー一覧 (Keyboard Shortcuts)"
             >
               <Keyboard size={18} />
@@ -680,7 +677,7 @@ const Header: React.FC<HeaderProps> = React.memo(({
 
             <button 
               onClick={toggleMenu}
-              className={`p-2 rounded-md transition-all ${showMenu ? 'bg-white/15 text-white' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
+              className={`cuebook-header-action inline-flex items-center justify-center p-2 rounded-md transition-all ${showMenu ? 'bg-white/15 text-white' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
               title="メニュー"
             >
               <Menu size={18} />
