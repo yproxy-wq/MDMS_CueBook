@@ -64,11 +64,12 @@ describe('sound editing edge cases',()=>{
     await select('second');
     await act(()=>(container.querySelector('[aria-label="音源を削除"]') as HTMLButtonElement).click());
     await act(()=>vi.advanceTimersByTime(8001));
-    expect(container.querySelector('[role="status"]')).toBeNull();
+    expect(container.textContent).not.toContain('を削除しました');
     expect(latest.sounds.map(sound=>sound.id)).toEqual(['a','c']);
   });
   it('moves the actual selected search result, including its original upper neighbor',async()=>{
     await change(container.querySelector('[placeholder="音源を検索..."]') as HTMLInputElement,'second');
+    await act(()=>(container.querySelector('[aria-label="secondの操作"]') as HTMLButtonElement).click());
     const up=container.querySelector('[aria-label="secondを上へ移動"]') as HTMLButtonElement;
     expect(up.disabled).toBe(false);
     await act(()=>up.click());

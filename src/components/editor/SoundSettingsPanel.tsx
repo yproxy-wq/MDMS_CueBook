@@ -1,5 +1,6 @@
 import type { User } from 'firebase/auth';
 import { BizAudioUpload } from './BizAudioUpload';
+import { isR2AssetUrl } from '../../services/R2AssetService';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { SoundConfig, SoundType } from '../../types';
 import { audioService } from '../../services/AudioService';
@@ -327,7 +328,7 @@ export const SoundSettingsPanel: React.FC<SoundSettingsPanelProps> = React.memo(
                <div className="flex items-center gap-2">
                 <span className="text-[9px] font-black font-cinzel text-white/20 uppercase tracking-widest">{sound.type}</span>
                 <div className="w-1 h-1 rounded-full bg-white/10" />
-                <span className="text-[9px] font-mono text-white/20">{sound.id.slice(0, 8)}</span>
+                <span className="text-xs text-white/55">{isR2AssetUrl(sound.url) ? 'Cloudflare保存' : /^(blob:|data:)/i.test(sound.url) ? 'この端末のファイル' : sound.url ? '外部URL' : 'ファイル未設定'}</span>
               </div>
             </div>
           </div>

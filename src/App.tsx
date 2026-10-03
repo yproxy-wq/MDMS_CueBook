@@ -510,7 +510,7 @@ function App() {
     isReady, user, currentScenarioRef, setState,
   });
 
-  useAudioLibrarySync(user, isReady, state, setState, message => {
+  const audioLibraryStatus = useAudioLibrarySync(user, isReady, state, setState, message => {
     setMigrationToast({ show: true, title: '音源一覧の同期を確認してください', description: message, type: 'warning' });
   }, handleStopSound);
 
@@ -2015,60 +2015,6 @@ function App() {
       )}
       </div>
 
-      {/* 統合ドラッグ＆ドックフローティングタイマー (v0.86 UI & UX Optimization) */}
-      {layoutMode !== '1-column' && activeTimer && activeTimerState && !isMenuOpen && (!timerDocked || isSpecialExtendedLayout) && (
-        <motion.div 
-          ref={timerRef}
-          drag
-          dragConstraints={dragConstraints}
-          dragMomentum={false}
-          dragElastic={0}
-          whileDrag={{ scale: 1.03, zIndex: 120, boxShadow: '0 30px 60px rgba(0,0,0,0.8)' }}
-          onDragStart={handleTimerDragStart}
-          onDrag={handleTimerDrag}
-          onDragEnd={handleTimerDragEnd}
-          className="fixed z-[100] w-[200px] cursor-grab active:cursor-grabbing touch-none shadow-[0_20px_50px_rgba(0,0,0,0.6)] bg-zinc-950/90 border-2 border-white/45 rounded-2xl backdrop-blur-md overflow-visible transition-[box-shadow] duration-300"
-          style={{ 
-            left: timerX,
-            top: timerY,
-            x: dragX,
-            y: dragY
-          }}
-        >
-          <TimerCard 
-            config={activeTimer}
-            timerLabelText={state.syncConfig?.timerLabelText}
-            seconds={activeTimerState.seconds}
-            isRunning={activeTimerState.isRunning}
-            startTime={activeTimerState.startTime}
-            themeColor={themeColor}
-            totalTimers={(timerTargetPhase?.timers || []).length}
-            activeTimerIndex={activeTimerIndex}
-            isCollapsed={false}
-            isLoggedIn={!!user}
-            onShare={getShareTimerUrl}
-            onToggle={onToggleTimer}
-            onReset={onResetTimer}
-            onAdjust={onAdjustTimer}
-            onOpenSyncModal={() => setShowSyncModal(true)}
-            timerFlashOnPauseEnabled={state.currentScenario.timerFlashOnPauseEnabled}
-            onSetDocked={setTimerDocked}
-            onPrev={() => {
-              const timerCount = (timerTargetPhase?.timers || []).length;
-              if (timerCount > 1) {
-                setActiveTimerIndex(prev => (prev - 1 + timerCount) % timerCount);
-              }
-            }}
-            onNext={() => {
-              const timerCount = (timerTargetPhase?.timers || []).length;
-              if (timerCount > 1) {
-                setActiveTimerIndex(prev => (prev + 1) % timerCount);
-              }
-            }}
-          />
-        </motion.div>
-      )}
-
       <main 
         className="flex-1 overflow-hidden z-10 relative h-full bg-black/20"
         onTouchStart={!state.isEditorMode ? handleTouchStart : undefined}
@@ -2083,7 +2029,8 @@ function App() {
               </div>
             }>
               <EditorView 
-                scenario={state.currentScenario} 
+                scenario={state.currentScenario}
+                audioLibraryStatus={audioLibraryStatus}
                 user={user}
                 onUpdate={handleUpdateScenario} 
                 currentPhaseId={state.currentPhaseId}
@@ -3056,6 +3003,7 @@ function App() {
 
 
       <FloatingTimerOverlay
+        isEditorMode={state.isEditorMode}
         layoutMode={layoutMode}
         activeTimer={activeTimer}
         activeTimerState={activeTimerState}

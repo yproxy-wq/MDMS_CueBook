@@ -4,6 +4,7 @@ import TimerCard from './Timer';
 import { TimerConfig, Phase } from '../types';
 
 interface FloatingTimerOverlayProps {
+  isEditorMode?: boolean;
   layoutMode: string;
   activeTimer: TimerConfig | undefined;
   activeTimerState: { seconds: number; isRunning: boolean; startTime?: number | null } | null;
@@ -35,6 +36,7 @@ interface FloatingTimerOverlayProps {
 }
 
 export const FloatingTimerOverlay: React.FC<FloatingTimerOverlayProps> = React.memo(({
+  isEditorMode = false,
   layoutMode,
   activeTimer,
   activeTimerState,
@@ -64,7 +66,7 @@ export const FloatingTimerOverlay: React.FC<FloatingTimerOverlayProps> = React.m
   handleTimerDrag,
   handleTimerDragEnd,
 }) => {
-  if (layoutMode === '1-column' || !activeTimer || !activeTimerState || isMenuOpen || (timerDocked && !isSpecialExtendedLayout)) {
+  if (isEditorMode || layoutMode === '1-column' || !activeTimer || !activeTimerState || isMenuOpen || (timerDocked && !isSpecialExtendedLayout)) {
     return null;
   }
 
@@ -81,7 +83,9 @@ export const FloatingTimerOverlay: React.FC<FloatingTimerOverlayProps> = React.m
       onDragStart={handleTimerDragStart}
       onDrag={handleTimerDrag}
       onDragEnd={handleTimerDragEnd}
-      className="fixed z-[100] w-[200px] cursor-grab active:cursor-grabbing touch-none shadow-[0_20px_50px_rgba(0,0,0,0.6)] bg-zinc-950/90 border-2 border-white/45 rounded-2xl backdrop-blur-md overflow-visible transition-[box-shadow] duration-300"
+      data-floating-timer
+      aria-label="フローティングタイマー"
+      className="floating-timer-overlay fixed z-[100] w-[280px] max-w-[calc(100vw-20px)] cursor-grab active:cursor-grabbing touch-none shadow-[0_20px_50px_rgba(0,0,0,0.6)] bg-zinc-950/90 border-2 border-white/30 rounded-xl backdrop-blur-md transition-[box-shadow] duration-300"
       style={{
         left: timerX,
         top: timerY,

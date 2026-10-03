@@ -1,0 +1,37 @@
+{
+  "id": "cuebook-uiux-e2e-20261003",
+  "title": "UIUX E2E専用テスト 2026-10-03",
+  "phases": [
+    {
+      "id": "e2e-phase",
+      "name": "検証専用",
+      "scriptBlocks": [
+        {
+          "id": "e2e-block",
+          "type": "markdown",
+          "content": "# 検証専用シナリオ"
+        }
+      ],
+      "timers": [
+        {
+          "id": "e2e-timer",
+          "label": "検証",
+          "durationMinutes": 2
+        }
+      ],
+      "checklists": [],
+      "recommendedSounds": []
+    }
+  ],
+  "sounds": [
+    {
+      "id": "e2e-tone",
+      "name": "E2Eテスト音声",
+      "url": "",
+      "type": "SE",
+      "volume": 0.05
+    }
+  ],
+  "characters": [],
+  "images": []
+}

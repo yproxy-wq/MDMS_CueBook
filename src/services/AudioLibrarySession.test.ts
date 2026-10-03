@@ -39,4 +39,35 @@ describe('audio library persistence boundaries', () => {
     const test = setup(); test.receive([]); test.session.edit([{ ...song, url: 'data:audio/wav;base64,AAAA' }]); await vi.advanceTimersByTimeAsync(500);
     expect(test.save.mock.calls[0][1][0].url).toBe('');
   });
+  it('never reports synced after a subscription error until a fresh snapshot arrives', async () => {
+    const statuses = vi.fn();
+    let receive!: (sounds: SoundConfig[] | null) => void;
+    let fail!: (error: unknown) => void;
+    const session = createAudioLibrarySession({ initial: [], pendingKey: 'failed-subscription', apply: vi.fn(), fail: vi.fn(), onStatus: statuses,
+      save: async (_base, local) => local, subscribe: (callback, error) => { receive = callback; fail = error; return vi.fn(); } });
+    sessions.push(session);
+    receive([]); fail(new Error('permission-denied'));
+    session.edit([]);
+    expect(statuses).toHaveBeenLastCalledWith('unavailable');
+    receive([]); expect(statuses).toHaveBeenLastCalledWith('synced');
+  });
+  it('reports pending and retry states until the write is acknowledged', async () => {
+    const statuses = vi.fn();
+    let receive!: (sounds: SoundConfig[] | null) => void;
+    const save = vi.fn(async (_base: SoundConfig[], local: SoundConfig[]) => local).mockRejectedValueOnce(new Error('offline'));
+    const session = createAudioLibrarySession({ initial: [], pendingKey: 'status-test', apply: vi.fn(), fail: vi.fn(), save, onStatus: statuses,
+      subscribe: callback => { receive = callback; return vi.fn(); } });
+    sessions.push(session);
+    expect(statuses).toHaveBeenLastCalledWith('loading');
+    session.edit([song]);
+    expect(statuses).not.toHaveBeenCalledWith('synced');
+    receive([]);
+    expect(statuses).toHaveBeenLastCalledWith('syncing');
+    await vi.advanceTimersByTimeAsync(500);
+    expect(statuses).toHaveBeenLastCalledWith('retrying');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(statuses).toHaveBeenLastCalledWith('synced');
+    session.dispose(); statuses.mockClear(); receive([]);
+    expect(statuses).not.toHaveBeenCalled();
+  });
 });

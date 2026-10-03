@@ -6,6 +6,14 @@
 ---
 
 ## 1. アプリケーション概要 (Overview)
+### UI操作・同期状態表示（v0.98-dev.38）
+- ユーザー承認済みの同期コア修正: `useTimerSync` はセッションごとに保存完了待ちの送信内容とシーケンスを保持。同じ内容のローカルスナップショット受信による再送を抑止し、内容の違う開始／停止・設定変更は通す。成功／失敗時に対応する待機状態を解除し、古い書き込みの完了で新しい待機状態を解除しない。時間算出と保存完了後のキャッシュ確定は維持する。
+- フローティングタイマーは `FloatingTimerOverlay` に集約し、編集画面では非表示。`useFloatingTimer` がResizeObserverで操作列を含めたパネル寸法を測り、復元座標・画面回転・ドラッグ後の位置を画面内へ補正する。時間算出・startTime/secondsは変更しない。
+- 音源一覧は選択用のネイティブbuttonと独立した操作buttonを使用。主要タッチ対象は44px以上とし、広い画面では一覧と詳細の二列、狭い画面では横方向の一覧を表示する。
+- ヘッダーにGM／編集切替を常設し、編集ナビゲーションと本文追加操作は日本語ラベルを表示する。マスター音量とUPDATE LOGを維持する。
+- `useModalFocus` は同期設定モーダルのTab循環・Escape・閉じた後のフォーカス復帰を管理する。QR、URL、Live Preview、集中制御の動作は維持する。
+- `AudioLibrarySyncStatus` はlocal/loading/syncing/synced/retrying/unavailable/offline。`AudioLibraryStatus` が音源一覧の状態を継続表示し、音声本体のCloudflare保存結果と区別する。購読エラー後は新しいスナップショット受信まで同期済みに戻さない。差分統合・再試行間隔・保存先は変更しない。
+
 - **名称**: CueBook
 - **用途**: TRPG・マーダーミステリー・リアル体験型ゲーム向け 高精度タイマー・音響・映像・シナリオ一元管理 GM（ゲームマスター）ワークスペース
 - **デザインコンセプト**: Dark, technical, brutalist, and elegant.
