@@ -42,6 +42,13 @@ beforeEach(() => {
 afterEach(async () => { await act(() => root.unmount()); container.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe('scoped session recovery', () => {
+  it('starts and saves with secure random bytes when randomUUID is unavailable', async () => {
+    vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) });
+    mocks.list.mockResolvedValue([]); await render();
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    expect(mocks.save.mock.calls[0][2]).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+    expect(result.showRecoveryModal).toBe(false);
+  });
   it('does not block a healthy additional tab, and rerenders do not restart startup checks', async () => {
     await render(); await render({ data: { ...state, volume: .8 } });
     expect(result.showRecoveryModal).toBe(false); expect(result.backupData).toBeNull();

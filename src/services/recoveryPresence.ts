@@ -1,3 +1,5 @@
+import { v4 as uuidv4 } from 'uuid';
+
 // One lock per document, held without polling or React updates. A frozen tab
 // still holds its lock; a missing BroadcastChannel reply never proves a crash.
 export const recoveryOwnerLock = (owner: string) => `cuebook-recovery-owner:${owner}`;
@@ -38,7 +40,7 @@ export class RecoveryPresence {
     }
     if (!this.channel) return 'unknown';
     const channel = this.channel;
-    const probe = crypto.randomUUID();
+    const probe = uuidv4();
     return new Promise(resolve => {
       const finish = (status: OwnerStatus) => {
         clearTimeout(timeout);

@@ -1,4 +1,5 @@
 import { AppState } from '../types';
+import { v4 as uuidv4 } from 'uuid';
 
 const DB_NAME = 'TheMastermindDeckDB';
 const STORE_NAME = 'sessions';
@@ -47,7 +48,7 @@ class SessionRecoveryService {
     const scenarioId = state.currentScenario.id;
     const sanitizeUrl = (url: string) => url?.startsWith('data:') && url.length > 50000 ? '' : url;
     const backup = {
-      key: recoveryPrefix(scope, scenarioId) + owner, generation: crypto.randomUUID(),
+      key: recoveryPrefix(scope, scenarioId) + owner, generation: uuidv4(),
       scope, owner, scenarioId, timestamp: Date.now(),
       state: { ...state, usedSounds: Array.from(state.usedSounds || []), currentScenario: {
         ...state.currentScenario,

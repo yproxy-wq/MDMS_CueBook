@@ -39,6 +39,7 @@ describe('recovery owner presence', () => {
   });
   it('fallback accepts a positive reply but treats a sleeping/no-reply owner as unknown', async () => {
     vi.useFakeTimers();
+    vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) });
     Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined });
     class Channel extends EventTarget {
       onmessage: ((event: MessageEvent) => void) | null = null;

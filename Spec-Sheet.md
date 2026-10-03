@@ -7,6 +7,7 @@
 
 ## 1. アプリケーション概要 (Overview)
 ### セッション復元の範囲・所有者判定（v0.98-dev.40）
+- v0.98-dev.41: 所有者・保存世代・生存問い合わせのIDは既存uuidライブラリのv4生成を使用。randomUUID非対応環境ではgetRandomValuesへフォールバックし、Web Locks／BroadcastChannelの機能検出以前に起動が失敗することを防ぐ。
 - 認証確定とシナリオ読み込み完了後に起動判定を行う。`useAppAuthentication.authReady`が認証待ちを匿名アカウントと区別する。範囲変更・アンマウント後の非同期結果は適用しない。
 - IndexedDB sessionsストアの`session_recovery_v2:<JSON([accountScope,scenarioId])>:<owner>`へ保存。候補は`owner/scope/scenarioId/generation/key/timestamp/state`を持ち、4日未満・未来でない有限日時・状態構造・保存範囲を検証する。usedSoundsは配列保存・Set復元。大型Data URLの既存除外とR2参照・タイマーstartTime/secondsは維持する。
 - `RecoveryPresence`がタブ所有者のWeb Lockを文書の存続中保持する。保持中の所有者は異常終了にしない。Web Locks利用不能時のBroadcastChannelは肯定応答のみ生存確定とし、無応答は確認不能として任意案内を出す。毎秒のroot更新や心拍期限による死亡判定は行わない。

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { AppState } from '../types';
 import { sessionRecoveryService, recoveryCleanKey, type RecoveryBackup } from '../services/sessionRecoveryService';
 import { RecoveryPresence } from '../services/recoveryPresence';
@@ -12,7 +13,7 @@ export function useSessionRecovery(isReady: boolean, state: AppState, scope: str
   const latestStateRef = useRef(state);
   latestStateRef.current = state;
   const ownerRef = useRef('');
-  if (!ownerRef.current) ownerRef.current = crypto.randomUUID();
+  if (!ownerRef.current) ownerRef.current = uuidv4();
   const owner = ownerRef.current;
   const presenceRef = useRef<RecoveryPresence | null>(null);
   const releaseClaimRef = useRef<(() => void) | null>(null);
