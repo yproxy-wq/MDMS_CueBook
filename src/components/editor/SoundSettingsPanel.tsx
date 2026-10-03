@@ -269,10 +269,14 @@ interface SoundSettingsPanelProps {
 export const SoundSettingsPanel: React.FC<SoundSettingsPanelProps> = React.memo(({
   sound, scenarioId, user = null, onSourceChange, onUpdate, onRemove, previewingSoundId, onTogglePreview
 }) => {
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
   const nameTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const urlTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingEditsRef = useRef<Partial<SoundConfig>>({});
+  useEffect(() => {
+    if (nameInputRef.current && pendingEditsRef.current.name === undefined) nameInputRef.current.value = sound.name || '';
+  }, [sound.name]);
   useEffect(() => {
     if (urlInputRef.current && pendingEditsRef.current.url === undefined) urlInputRef.current.value = sound.url || '';
   }, [sound.url]);
@@ -314,6 +318,7 @@ export const SoundSettingsPanel: React.FC<SoundSettingsPanelProps> = React.memo(
               <div className="flex-1 min-w-0">
                <input
                  aria-label="音源名"
+                 ref={nameInputRef}
                  onBlur={flushEdits}
                  defaultValue={sound.name || ''}
                  onChange={e => {
