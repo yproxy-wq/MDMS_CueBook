@@ -3,6 +3,10 @@ import { APP_VERSION } from '../config/version';
 
 export const UPDATE_LOGS = [
   { date: '2026.10.03', version: APP_VERSION, notes: [
+    '正常な別タブ起動で復元モーダルを表示しないよう、タブの生存確認とバックアップの保存範囲を分離しました。',
+    '復元候補はアカウント・シナリオ・保存世代を照合し、確認中も上書きせず保持します。旧形式の保存は任意確認に変更しました。'
+  ]},
+  { date: '2026.10.03', version: 'v0.98-dev.39', notes: [
     '他タブから届いた音源名を開いたままの入力欄にも反映します。入力中の未保存テキストは保護します。'
   ]},
   { date: '2026.10.03', version: 'v0.98-dev.38', notes: [
